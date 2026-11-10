@@ -32,7 +32,7 @@ Take the first unchecked roadmap item not already in STATE "Done".
 
 ## Rules
 - You may not edit: `night/*.ps1`, `night/code.md`, `night/review.md`,
-  `night/settings.json`, `night/reference.json`, `night/test_check.py`,
+  `night/settings.json`, `night/reference.json`, `night/test_check.py`, `night/check.py`, `night/baseline/`,
   `CLAUDE.md`, `test_water.py`. Never weaken a test to make it pass.
 - No git push, merge, branch changes, or installs. They're blocked anyway; don't try workarounds.
 - Follow CLAUDE.md: minimal code, stdlib and existing packages first, figure rules.

@@ -26,6 +26,7 @@ Write-Host "Night $branch : stop at $stop"
 $env:MSYS_NO_PATHCONV = '1'   # claude's Bash is Git Bash: stop it rewriting /root and /mnt paths for wsl
 Set-NoSleep
 try {
+    Clear-NightLeftovers $wt
     Write-Utf8 "$wt\night\queue.txt" ''
 
     # Phase 1: code
@@ -58,21 +59,22 @@ try {
     $bad = { param($r) $r.TimedOut -or $r.ExitCode -ne 0 }
     if ((& $bad $r1) -or (& $bad $r3)) {
         $tail = { param($f) if (Test-Path $f) { (Get-Content $f -Tail 40 -Encoding UTF8) -join "`n" } else { '(no log)' } }
-        Write-Utf8 "$wt\NIGHT_REPORT.md" (@(
-            "# Night report $branch (FALLBACK: written by night.ps1)", '',
-            'A Claude phase failed, timed out or ran out of usage. Verdict: do not merge without a look.', '',
+        $summary = @(
+            "# Night $branch : a phase failed (note added by night.ps1)", '',
+            'A Claude phase failed, timed out or ran out of usage. Do not merge without a look.', '',
             '| Phase | Exit | Timed out | Seconds |', '|---|---|---|---|',
             "| 1 code | $($r1.ExitCode) | $($r1.TimedOut) | $($r1.Seconds) |",
             "| 3 review | $($r3.ExitCode) | $($r3.TimedOut) | $($r3.Seconds) |", '',
-            '## Jobs', ($jobs | ForEach-Object { "- $($_.Name): $($_.Status) (exit $($_.ExitCode))" }), '',
-            '## Phase 1 log (tail)', '```', (& $tail "$logs\phase1.log"), '```',
-            '## Phase 3 log (tail)', '```', (& $tail "$logs\phase3.log"), '```') -join "`n")
+            '## Jobs', ($jobs | ForEach-Object { "- $($_.Name): $($_.Status) (exit $($_.ExitCode))" })) -join "`n"
+        $body = @('## Phase 1 log (tail)', '```', (& $tail "$logs\phase1.log"), '```',
+            '## Phase 3 log (tail)', '```', (& $tail "$logs\phase3.log"), '```') -join "`n"
+        Write-FallbackReport -Path "$wt\NIGHT_REPORT.md" -Summary $summary -Body $body -Phase3Ok (-not (& $bad $r3))
     }
     & git -C $wt add -A
     & git -C $wt commit -q -m "night: logs and figures ($branch)"
-    $env:GIT_TERMINAL_PROMPT = '0'
-    & git -C $wt push -u origin $branch
-    Write-Host "Pushed $branch. Read NIGHT_REPORT.md on that branch."
+    $push = Invoke-Push -RepoDir $wt -Remote origin -Branch $branch -TimeoutSec 300
+    if ($push.Ok) { Write-Host "Pushed $branch. Read NIGHT_REPORT.md on that branch." }
+    else { Write-Host "PUSH FAILED or timed out (see $env:TEMP\night-push.log.err). The work is local on $branch in $wt." }
 } finally {
     Clear-NoSleep
 }

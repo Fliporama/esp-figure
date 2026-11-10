@@ -54,5 +54,32 @@ $msgs = @(Test-Prereqs -RepoDir (Split-Path $PSScriptRoot))
 $env:PATH = $savedPath
 Assert (@($msgs | Where-Object { $_ -match 'claude' }).Count -ge 1) "claude missing reported ($msgs)"
 
+# Clear-NightLeftovers: last night's logs/report/check result must not be read as tonight's
+New-Item -ItemType Directory -Force "$tmp\wt\night\logs" | Out-Null
+'x' | Set-Content "$tmp\wt\night\logs\phase2.log"; 'x' | Set-Content "$tmp\wt\NIGHT_REPORT.md"; 'x' | Set-Content "$tmp\wt\night\check_result.json"
+Clear-NightLeftovers "$tmp\wt"
+Assert (-not (Test-Path "$tmp\wt\night\logs\phase2.log") -and -not (Test-Path "$tmp\wt\NIGHT_REPORT.md") -and -not (Test-Path "$tmp\wt\night\check_result.json")) 'leftovers cleared'
+Assert (Test-Path "$tmp\wt\night\logs") 'logs dir kept'
+
+# Write-FallbackReport: keeps the agent's report when only phase 1 failed, replaces it when phase 3 failed
+Write-Utf8 "$tmp\r.md" "# agent report`nverdict"
+Write-FallbackReport -Path "$tmp\r.md" -Summary 'PHASE TABLE' -Body 'LOGS' -Phase3Ok $true
+$t = Get-Content "$tmp\r.md" -Raw -Encoding UTF8
+Assert ($t -match 'PHASE TABLE' -and $t -match 'agent report' -and $t -notmatch 'LOGS') "agent report kept ($t)"
+Write-FallbackReport -Path "$tmp\r.md" -Summary 'PHASE TABLE' -Body 'LOGS' -Phase3Ok $false
+$t = Get-Content "$tmp\r.md" -Raw -Encoding UTF8
+Assert ($t -match 'LOGS' -and $t -notmatch 'agent report') 'replaced when phase 3 failed'
+
+# Invoke-Push: fails fast and reports failure (bad remote), never hangs
+$p = Invoke-Push -RepoDir (Split-Path $PSScriptRoot) -Remote 'https://invalid.invalid/x.git' -Branch 'nope' -TimeoutSec 60
+Assert (-not $p.Ok) 'push to a bad remote reported as failed'
+
+# Default WSL runner: a job over its cap is killed inside WSL too (no orphan python), status timeout
+Write-Utf8 "$tmp\q2.txt" "calc CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC --name slowjob --opt`n"
+$res = @(Invoke-Queue -QueuePath "$tmp\q2.txt" -WorktreeWsl (Get-WslPath (Split-Path $PSScriptRoot)) -JobTimeoutSec 20 -TotalTimeoutSec 600 -LogDir $tmp -MinJobSec 1)
+Assert ($res[0].Status -eq 'timeout') "slow job status timeout (got $($res[0].Status))"
+$orphans = & wsl -d Ubuntu -u root -e sh -c 'ps -eo args | grep "[e]sp_figure.py calc CCCC" | wc -l'
+Assert ([int]$orphans -eq 0) "no orphan python in WSL ($orphans)"
+
 Remove-Item -Recurse -Force $tmp
 'ok'

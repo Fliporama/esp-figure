@@ -23,8 +23,9 @@ function Invoke-Queue([string]$QueuePath, [string]$WorktreeWsl, [int]$JobTimeout
     if (-not $Runner) {
         $Runner = {
             param($jobArgs, $timeoutSec, $logPath)
-            Invoke-Capped -FilePath wsl -ArgumentList (@('-d', 'Ubuntu', '-u', 'root', '--cd', $WorktreeWsl, '-e', '/root/esp-venv/bin/python', 'esp_figure.py') + $jobArgs) `
-                -WorkingDirectory $LogDir -TimeoutSec $timeoutSec -LogPath $logPath
+            # Cap inside WSL too: killing wsl.exe on Windows does not stop the Linux python (exit 124 = timed out)
+            Invoke-Capped -FilePath wsl -ArgumentList (@('-d', 'Ubuntu', '-u', 'root', '--cd', $WorktreeWsl, '-e', 'timeout', '-k', '60', "$timeoutSec",
+                    '/root/esp-venv/bin/python', 'esp_figure.py') + $jobArgs) -WorkingDirectory $LogDir -TimeoutSec ($timeoutSec + 120) -LogPath $logPath
         }.GetNewClosure()
     }
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -38,7 +39,7 @@ function Invoke-Queue([string]$QueuePath, [string]$WorktreeWsl, [int]$JobTimeout
         else {
             $o = & $Runner ($line -split '\s+') ([Math]::Min($JobTimeoutSec, $left)) (Join-Path $LogDir "$name.log")
             $r.ExitCode = $o.ExitCode; $r.TimedOut = $o.TimedOut
-            $r.Status = if ($o.TimedOut) { 'timeout' } elseif ($o.ExitCode -eq 0) { 'ok' } else { 'failed' }
+            $r.Status = if ($o.TimedOut -or $o.ExitCode -in 124, 137) { 'timeout' } elseif ($o.ExitCode -eq 0) { 'ok' } else { 'failed' }
         }
         Add-Content -Path (Join-Path $LogDir 'phase2.log') -Value "$($r.Name) $($r.Status) exit=$($r.ExitCode) :: $line"
         $r
@@ -49,13 +50,36 @@ function Test-Prereqs([string]$RepoDir) {
     $msgs = @()
     if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { $msgs += 'claude CLI not found on PATH' }
     $tmp = Join-Path $env:TEMP 'night-prereq'
-    $env:GIT_TERMINAL_PROMPT = '0'
+    $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'   # no credential prompt or sign-in window at night
     $g = Invoke-Capped -FilePath git -ArgumentList @('push', '--dry-run', 'origin', 'HEAD') -WorkingDirectory $RepoDir -TimeoutSec 60 -LogPath "$tmp-git.log"
     if ($g.ExitCode -ne 0) { $msgs += "git push --dry-run failed or asked for credentials (see $tmp-git.log.err)" }
     $w = Invoke-Capped -FilePath wsl -ArgumentList @('-d', 'Ubuntu', '-u', 'root', '-e', '/root/esp-venv/bin/python', '-c', 'import pyscf') `
         -WorkingDirectory $RepoDir -TimeoutSec 120 -LogPath "$tmp-wsl.log"
     if ($w.ExitCode -ne 0) { $msgs += 'WSL Python cannot import pyscf' }
     $msgs
+}
+
+function Get-WslPath([string]$WinPath) {
+    $full = (Resolve-Path $WinPath).Path
+    '/mnt/' + $full.Substring(0, 1).ToLower() + ($full.Substring(2) -replace '\\', '/')
+}
+
+function Clear-NightLeftovers([string]$Worktree) {
+    # Logs, report and check result are committed each night; remove them so tonight never reads last night's.
+    Remove-Item "$Worktree\night\logs\*", "$Worktree\NIGHT_REPORT.md", "$Worktree\night\check_result.json" -Force -ErrorAction SilentlyContinue
+}
+
+function Write-FallbackReport([string]$Path, [string]$Summary, [string]$Body, [bool]$Phase3Ok) {
+    # Phase 3 succeeded: keep its report and put the failure summary on top. Otherwise replace it entirely.
+    if ($Phase3Ok -and (Test-Path $Path)) { Write-Utf8 $Path ($Summary + "`n`n---`n`n" + [IO.File]::ReadAllText((Resolve-Path $Path).Path)) }
+    else { Write-Utf8 $Path ($Summary + "`n`n" + $Body) }
+}
+
+function Invoke-Push([string]$RepoDir, [string]$Remote, [string]$Branch, [int]$TimeoutSec = 300) {
+    $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
+    $r = Invoke-Capped -FilePath git -ArgumentList @('push', '-u', $Remote, $Branch) -WorkingDirectory $RepoDir -TimeoutSec $TimeoutSec `
+        -LogPath (Join-Path $env:TEMP 'night-push.log')
+    [pscustomobject]@{ Ok = (-not $r.TimedOut -and $r.ExitCode -eq 0); Result = $r }
 }
 
 function Get-StopTime([string]$StopBy, [datetime]$Now) {
