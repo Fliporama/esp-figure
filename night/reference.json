@@ -1,0 +1,10 @@
+{
+ "regression": {
+  "water_test": {"cmd": "test_water.py"},
+  "pam3_sp": {"xyz": "night/baseline/pam3_opt.xyz",
+              "scf_energy": {"value": -782.4865368, "tol": 1e-6},
+              "esp_min": {"value": -0.0663, "tol": 1e-4},
+              "esp_max": {"value": 0.078, "tol": 1e-4}}
+ },
+ "sanity": {}
+}
