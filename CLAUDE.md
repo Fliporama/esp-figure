@@ -22,7 +22,22 @@ First target molecule: polyacrylamide (PAM) oligomer.
   2026-11-10). Water test passes; `runs/pam3/` has draft (MMFF) figures,
   checked visually. Target molecule: the H-capped PAM trimer. Default figure
   style (1600×1000 PNG); no journal requirements.
-- Next: final run with `--opt --force` (geomeTRIC already installed).
+- Conformer search added (lowest MMFF of 50). For PAM3 the winner is folded,
+  with 4 internal N–H···O H-bonds (gas-phase artefact vs. water/polymer).
+- **Pending task: "conformer comparison"** (user approved 2026-11-10, run it
+  without re-asking):
+  1. Add `--no-hbond` to `calc`: in `geometry()`, keep only conformers with
+     no intramolecular H···acceptor contact < 2.5 Å (H bonded to N/O; acceptor
+     O/N in another group), then take the lowest MMFF energy among them. Exit
+     with a clear message if none qualify. Record the choice in method.txt.
+  2. Run sequentially in the background (each 30–60 min), then render both:
+     `calc <PAM3 SMILES> --name pam3_opt --opt` and
+     `calc <PAM3 SMILES> --name pam3_ext_opt --opt --no-hbond`.
+     (Different names matter: the skip check only compares the input string.)
+  3. Compare and report: images, DFT energy difference (kcal/mol), ESP range,
+     H-bond count after optimisation (opt may fold/unfold), whether `--view`
+     needs changing. Recommend one for the paper; the user decides.
+  4. Nudge the colour bar title (crowds the top label), commit, push.
 
 ## This machine
 
