@@ -18,6 +18,7 @@ GRID = 100       # density grid points per axis
 MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near the O atoms
 LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
+HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
 
 
@@ -41,11 +42,22 @@ def read_cube(path):
     return g
 
 
-def geometry(spec, charge):
-    """SMILES or .xyz -> symbols, coords (Å), charge, description of where the geometry came from."""
+def hbonds(m, xyz):
+    """Intramolecular H-bonds: H on N/O within HB_CUT of an N/O more than 3 bonds away (i.e. not its own amide O)."""
+    from rdkit import Chem
+    topo = Chem.GetDistanceMatrix(m)
+    don = [a.GetIdx() for a in m.GetAtoms() if a.GetSymbol() == "H" and a.GetNeighbors()[0].GetSymbol() in "NO"]
+    acc = [a.GetIdx() for a in m.GetAtoms() if a.GetSymbol() in ("N", "O")]
+    return int(sum(topo[h, a] > 3 and np.linalg.norm(xyz[h] - xyz[a]) < HB_CUT for h in don for a in acc))
+
+
+def geometry(spec, charge, no_hbond=False):
+    """SMILES or .xyz -> symbols, coords (Å), charge, description, RDKit mol (None for .xyz)."""
     if spec.endswith(".xyz"):
+        if no_hbond:
+            sys.exit("--no-hbond needs SMILES input (it picks among conformers)")
         sym, xyz = read_xyz(spec)
-        return sym, xyz, charge, f"geometry read from {Path(spec).name}"
+        return sym, xyz, charge, f"geometry read from {Path(spec).name}", None
     from rdkit import Chem
     from rdkit.Chem import AllChem
     m = Chem.MolFromSmiles(spec)
@@ -56,14 +68,21 @@ def geometry(spec, charge):
     cids = list(AllChem.EmbedMultipleConfs(m, numConfs=CONFS, randomSeed=7))
     if not cids:
         sys.exit("RDKit could not embed the molecule")
-    energies = [e for _, e in AllChem.MMFFOptimizeMoleculeConfs(m, maxIters=2000)]
-    best = int(np.argmin(energies))
+    energies = np.array([e for _, e in AllChem.MMFFOptimizeMoleculeConfs(m, maxIters=2000)])
+    ok = np.ones(len(cids), bool)
+    if no_hbond:
+        ok = np.array([hbonds(m, m.GetConformer(c).GetPositions()) == 0 for c in cids])
+        if not ok.any():
+            sys.exit(f"--no-hbond: all {len(cids)} conformers have an intramolecular H-bond (< {HB_CUT} Å)")
+    best = int(np.argmin(np.where(ok, energies, np.inf)))
     sym = [a.GetSymbol() for a in m.GetAtoms()]
+    how = (f"lowest-energy of {ok.sum()}/{len(cids)} H-bond-free (no H···N/O < {HB_CUT} Å) conformers"
+           if no_hbond else f"lowest-energy of {len(cids)} conformers")
     return (sym, m.GetConformer(cids[best]).GetPositions(), Chem.GetFormalCharge(m),
-            f"lowest-energy of {len(cids)} RDKit ETKDG conformers after MMFF94 (draft)")
+            f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
 
 
-def calc(spec, name, charge=0, opt=False, force=False, root="runs"):
+def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs"):
     out = Path(root) / name
     log = out / "method.txt"
     if log.exists() and not force:
@@ -78,7 +97,7 @@ def calc(spec, name, charge=0, opt=False, force=False, root="runs"):
     from pyscf.tools import cubegen
 
     t0 = time.time()
-    sym, xyz, charge, geo = geometry(spec, charge)
+    sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond)
     mol = gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, xyz)],
                 charge=charge, basis="6-31g*", verbose=0)
 
@@ -119,6 +138,7 @@ name: {name}
 charge: {charge}
 atoms: {len(sym)}
 geometry: {geo}
+intramolecular H-bonds in final geometry (H···N/O < {HB_CUT} Å): {hbonds(rdm, xyz) if rdm else "n/a"}
 level of theory: {LEVEL}, density fitting (PySCF default auxiliary basis); ESP integrals exact
 SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged})
 surface: electron density isosurface rho = {ISO} a.u. (grid {GRID}^3, margin {MARGIN} bohr), {len(pts)} vertices
@@ -184,7 +204,7 @@ def render(name, style="both", limit=None, view=None, root="runs"):
         lim = limit if limit is not None else LIMITS[st]
         shoot(out / f"{st}_esp.png", lambda p: p.add_mesh(
             surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.55, smooth_shading=True, specular=0.3,
-            scalar_bar_args=dict(title="ESP (a.u.)", fmt="%.3f", n_labels=5, color="black", vertical=True,
+            scalar_bar_args=dict(title="ESP (a.u.)\n", fmt="%.3f", n_labels=5, color="black", vertical=True,
                                  position_x=0.88, position_y=0.2, width=0.05, height=0.6,
                                  title_font_size=28, label_font_size=24)))
         notes.append(f"{st}_esp.png: colour scale -{lim} to +{lim} a.u. ({st}; red = negative, blue = positive; "
@@ -203,6 +223,7 @@ if __name__ == "__main__":
     c.add_argument("--charge", type=int, default=0, help="total charge (.xyz input only; SMILES carries its own)")
     c.add_argument("--opt", action="store_true", help="DFT geometry optimisation first (pip install geometric; 30-60 min)")
     c.add_argument("--force", action="store_true", help="recompute even if results exist")
+    c.add_argument("--no-hbond", action="store_true", help="take the lowest-MMFF conformer with no intramolecular H-bond")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -211,6 +232,6 @@ if __name__ == "__main__":
                    help="camera direction, e.g. --view=0,0,1 (default: along the thinnest molecular axis)")
     a = ap.parse_args()
     if a.cmd == "calc":
-        calc(a.input, a.name, a.charge, a.opt, a.force)
+        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond)
     else:
         render(a.name, a.style, a.limit, a.view)

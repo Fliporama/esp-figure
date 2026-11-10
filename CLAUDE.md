@@ -22,22 +22,22 @@ First target molecule: polyacrylamide (PAM) oligomer.
   2026-11-10). Water test passes; `runs/pam3/` has draft (MMFF) figures,
   checked visually. Target molecule: the H-capped PAM trimer. Default figure
   style (1600×1000 PNG); no journal requirements.
-- Conformer search added (lowest MMFF of 50). For PAM3 the winner is folded,
-  with 4 internal N–H···O H-bonds (gas-phase artefact vs. water/polymer).
-- **Pending task: "conformer comparison"** (user approved 2026-11-10, run it
-  without re-asking):
-  1. Add `--no-hbond` to `calc`: in `geometry()`, keep only conformers with
-     no intramolecular H···acceptor contact < 2.5 Å (H bonded to N/O; acceptor
-     O/N in another group), then take the lowest MMFF energy among them. Exit
-     with a clear message if none qualify. Record the choice in method.txt.
-  2. Run sequentially in the background (each 30–60 min), then render both:
-     `calc <PAM3 SMILES> --name pam3_opt --opt` and
-     `calc <PAM3 SMILES> --name pam3_ext_opt --opt --no-hbond`.
-     (Different names matter: the skip check only compares the input string.)
-  3. Compare and report: images, DFT energy difference (kcal/mol), ESP range,
-     H-bond count after optimisation (opt may fold/unfold), whether `--view`
-     needs changing. Recommend one for the paper; the user decides.
-  4. Nudge the colour bar title (crowds the top label), commit, push.
+- Conformer search added (lowest MMFF of 50). For PAM3 the MMFF winner is
+  folded with 1 inter-amide N–H···O H-bond (the earlier "4" counted each
+  amide H against its own C=O, ~2.45 Å by geometry; `hbonds()` now excludes
+  acceptors ≤3 bonds away).
+- Conformer comparison done 2026-11-11 (B3LYP/6-31G(d), gas phase, no D3):
+  `runs/pam3_opt` (folded, 2 H-bonds after opt, E −782.486537) vs.
+  `runs/pam3_ext_opt` (`--no-hbond` start, 1 H-bond formed during opt,
+  E −782.477763): folded lower by 5.5 kcal/mol. ESP −0.066/+0.078 vs.
+  −0.070/+0.075 a.u. Both runs used an unspecified-stereo SMILES (see
+  IMPROVEMENTS.md §1); treat as a pilot. Open figure issues: jagged
+  stripes on parts of the surface in both opt renders; ext needs a `--view`
+  (left amide points at the camera).
+- Night runner (autonomous overnight work) designed and planned:
+  `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
+  `docs/superpowers/plans/2026-11-11-night-runner.md`; built on branch
+  `night-runner`.
 
 ## This machine
 
@@ -149,6 +149,11 @@ python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--vi
 
 Test: `test_water.py` — water molecule, check ESP is negative near O and
 positive near the H atoms, and the range is roughly ±0.05–0.1 a.u.
+
+## Model improvements
+
+Backlog of science improvements (tacticity, solvent, D3, DFT re-ranking, …)
+lives in `IMPROVEMENTS.md`. Read it before changing the method.
 
 ## Open questions for the user
 
