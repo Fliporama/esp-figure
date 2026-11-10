@@ -78,7 +78,7 @@ Assert (-not $p.Ok) 'push to a bad remote reported as failed'
 Write-Utf8 "$tmp\q2.txt" "calc CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC --name slowjob --opt`n"
 $res = @(Invoke-Queue -QueuePath "$tmp\q2.txt" -WorktreeWsl (Get-WslPath (Split-Path $PSScriptRoot)) -JobTimeoutSec 20 -TotalTimeoutSec 600 -LogDir $tmp -MinJobSec 1)
 Assert ($res[0].Status -eq 'timeout') "slow job status timeout (got $($res[0].Status))"
-$orphans = & wsl -d Ubuntu -u root -e sh -c 'ps -eo args | grep "[e]sp_figure.py calc CCCC" | wc -l'
+$orphans = & wsl -d Ubuntu -u root -e pgrep -fc esp_figure.py   # no shell quoting: PS 5.1 mangles nested quotes
 Assert ([int]$orphans -eq 0) "no orphan python in WSL ($orphans)"
 
 Remove-Item -Recurse -Force $tmp
