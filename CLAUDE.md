@@ -57,7 +57,7 @@ Offscreen rendering works without a display (a harmless
 
 | Step | Choice | Why |
 |---|---|---|
-| Geometry | RDKit embed + MMFF (draft) | Fast. **Draft only** — final figures need DFT optimisation (see TODO) |
+| Geometry | RDKit: 50 conformers, keep lowest MMFF energy (draft) | Fast. **Draft only** — final figures need DFT optimisation (see TODO) |
 | Electronic structure | PySCF, B3LYP/6-31G(d), density fitting | Common level of theory in papers; ~2 min for 37 atoms on a laptop-class CPU |
 | Surface | Electron density isosurface ρ = 0.001 a.u. | Standard vdW-like surface for ESP maps |
 | ESP | Computed **only at surface vertices** | See pitfalls |

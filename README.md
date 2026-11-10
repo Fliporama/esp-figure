@@ -47,7 +47,7 @@ force-field draft.
 
 | Step | Choice |
 |---|---|
-| Geometry | RDKit + MMFF94 (draft), or B3LYP/6-31G(d) with `--opt` |
+| Geometry | Lowest of 50 RDKit conformers by MMFF94 (draft), or then B3LYP/6-31G(d) with `--opt` |
 | Electronic structure | PySCF, B3LYP/6-31G(d), density fitting |
 | Surface | Electron density isosurface, ρ = 0.001 a.u. |
 | ESP | Computed exactly at each surface vertex |
@@ -57,8 +57,10 @@ To compare molecules, render them all with the same `--limit`.
 
 ## Limitations — read before publishing
 
-- **One conformer.** Flexible molecules are embedded once; a different
-  conformer can give a visibly different ESP map.
+- **Gas-phase conformer.** SMILES input is embedded as 50 conformers and the
+  lowest MMFF94 energy one is used. In the gas phase that tends to be a folded
+  shape with internal hydrogen bonds, which may not match the molecule in
+  solution or in a solid. If that matters, supply your own `.xyz` geometry.
 - **Closed-shell, neutral or charged molecules only** — no radicals.
 - **Fixed level of theory** (B3LYP/6-31G(d)): standard for figures like
   these, but not suitable for quantitative energetics.

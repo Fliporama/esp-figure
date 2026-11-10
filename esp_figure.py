@@ -17,6 +17,7 @@ GRID = 100       # density grid points per axis
 # ponytail: fixed point count, so spacing grows with molecule size; raise GRID if big molecules look faceted
 MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near the O atoms
 LIMITS = {"rainbow": 0.06, "rwb": 0.03}
+CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 LEVEL = "B3LYP/6-31G(d)"
 
 
@@ -51,11 +52,15 @@ def geometry(spec, charge):
     if m is None:
         sys.exit(f"bad SMILES: {spec}")
     m = Chem.AddHs(m)
-    if AllChem.EmbedMolecule(m, randomSeed=7) != 0:
+    # Conformer search: embed many, keep the lowest MMFF energy, so the figure isn't one random shape.
+    cids = list(AllChem.EmbedMultipleConfs(m, numConfs=CONFS, randomSeed=7))
+    if not cids:
         sys.exit("RDKit could not embed the molecule")
-    AllChem.MMFFOptimizeMolecule(m)
+    energies = [e for _, e in AllChem.MMFFOptimizeMoleculeConfs(m, maxIters=2000)]
+    best = int(np.argmin(energies))
     sym = [a.GetSymbol() for a in m.GetAtoms()]
-    return sym, m.GetConformer().GetPositions(), Chem.GetFormalCharge(m), "RDKit ETKDG + MMFF94 geometry (draft)"
+    return (sym, m.GetConformer(cids[best]).GetPositions(), Chem.GetFormalCharge(m),
+            f"lowest-energy of {len(cids)} RDKit ETKDG conformers after MMFF94 (draft)")
 
 
 def calc(spec, name, charge=0, opt=False, force=False, root="runs"):
