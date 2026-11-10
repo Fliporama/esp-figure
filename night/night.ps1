@@ -1,7 +1,7 @@
 # Overnight run: phase 1 code (claude) -> phase 2 compute (queue) -> phase 3 review (claude) -> push night branch.
 #   powershell -ExecutionPolicy Bypass -File night\night.ps1 [-StopBy 08:00] [-DryRun] [-KillPhase1]
 # Nothing runs after -StopBy. ASCII only (PS 5.1 reads BOM-less scripts as ANSI).
-param([string]$StopBy = '08:00', [switch]$DryRun, [switch]$KillPhase1)
+param([string]$StopBy = '08:00', [switch]$DryRun, [switch]$KillPhase1, [string]$Base = 'main')
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib.ps1"
 $repo = Split-Path $PSScriptRoot
@@ -19,7 +19,7 @@ if (Test-Path $wt) { Write-Host "$wt already exists (an earlier night not merged
 & git -C $repo rev-parse --verify --quiet "refs/heads/$branch" | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host "Branch $branch already exists."; exit 1 }
 
-& git -C $repo worktree add -b $branch $wt main
+& git -C $repo worktree add -b $branch $wt $Base
 $logs = "$wt\night\logs"; New-Item -ItemType Directory -Force $logs | Out-Null
 $settings = "$wt\night\settings.json"
 Write-Host "Night $branch : stop at $stop"
