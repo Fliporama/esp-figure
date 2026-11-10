@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
+
+  python esp_figure.py calc "CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O" --name pam3 [--charge 0] [--opt] [--force]
+  python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z]
+
+Results live in runs/<name>/: mol.xyz, dens.cube, surf.vtk (with ESP), method.txt,
+and after render: ball.png, <style>_esp.png, caption.txt.
+"""
+import argparse, sys, time
+from pathlib import Path
+import numpy as np
+
+B2A = 0.529177   # bohr -> Å
+ISO = 0.001      # density isovalue for the surface, a.u.
+GRID = 100       # density grid points per axis
+# ponytail: fixed point count, so spacing grows with molecule size; raise GRID if big molecules look faceted
+MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near the O atoms
+LIMITS = {"rainbow": 0.06, "rwb": 0.03}
+LEVEL = "B3LYP/6-31G(d)"
+
+
+def read_xyz(path):
+    lines = Path(path).read_text().splitlines()
+    rows = [l.split() for l in lines[2:2 + int(lines[0])]]
+    return [r[0] for r in rows], np.array([r[1:4] for r in rows], float)
+
+
+def read_cube(path):
+    """Gaussian cube (bohr) -> PyVista grid (Å) with point data 'rho'."""
+    import pyvista as pv
+    L = Path(path).read_text().split("\n")
+    n, *o = L[2].split()
+    ax = [L[3 + i].split() for i in range(3)]
+    shape = [int(a[0]) for a in ax]
+    step = np.array([a[1:4] for a in ax], float)
+    data = np.array(" ".join(L[6 + abs(int(n)):]).split(), float).reshape(shape)
+    g = pv.ImageData(dimensions=shape, spacing=np.diag(step) * B2A, origin=np.array(o[:3], float) * B2A)
+    g.point_data["rho"] = data.ravel(order="F")
+    return g
+
+
+def geometry(spec, charge):
+    """SMILES or .xyz -> symbols, coords (Å), charge, description of where the geometry came from."""
+    if spec.endswith(".xyz"):
+        sym, xyz = read_xyz(spec)
+        return sym, xyz, charge, f"geometry read from {Path(spec).name}"
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    m = Chem.MolFromSmiles(spec)
+    if m is None:
+        sys.exit(f"bad SMILES: {spec}")
+    m = Chem.AddHs(m)
+    if AllChem.EmbedMolecule(m, randomSeed=7) != 0:
+        sys.exit("RDKit could not embed the molecule")
+    AllChem.MMFFOptimizeMolecule(m)
+    sym = [a.GetSymbol() for a in m.GetAtoms()]
+    return sym, m.GetConformer().GetPositions(), Chem.GetFormalCharge(m), "RDKit ETKDG + MMFF94 geometry (draft)"
+
+
+def calc(spec, name, charge=0, opt=False, force=False, root="runs"):
+    out = Path(root) / name
+    log = out / "method.txt"
+    if log.exists() and not force:
+        first = log.read_text().splitlines()[0]
+        if first != f"input: {spec}":
+            sys.exit(f"{out} holds a different molecule ({first}). Use another --name, or --force.")
+        print(f"{out} already computed (use --force to redo)")
+        return out
+    out.mkdir(parents=True, exist_ok=True)
+    import pyscf, rdkit
+    from pyscf import gto, dft, df
+    from pyscf.tools import cubegen
+
+    t0 = time.time()
+    sym, xyz, charge, geo = geometry(spec, charge)
+    mol = gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, xyz)],
+                charge=charge, basis="6-31g*", verbose=0)
+
+    def scf(mol):
+        mf = dft.RKS(mol).density_fit()
+        mf.xc = "b3lyp"
+        mf.kernel()
+        return mf
+
+    mf = scf(mol)
+    if opt:
+        from pyscf.geomopt.geometric_solver import optimize   # pip install geometric
+        mol = optimize(mf)
+        mf = scf(mol)
+        geo = f"{LEVEL} optimised geometry (geomeTRIC), started from {geo}"
+    if not mf.converged:
+        print("WARNING: SCF did not converge; results are not trustworthy", file=sys.stderr)
+    dm = mf.make_rdm1()
+    xyz = mol.atom_coords() * B2A
+    (out / "mol.xyz").write_text(f"{len(sym)}\n{name}\n" + "".join(
+        f"{s} {x:.6f} {y:.6f} {z:.6f}\n" for s, (x, y, z) in zip(sym, xyz)))
+
+    # Surface: isosurface of the density. ESP only at its vertices (full-grid ESP is >10x slower).
+    cubegen.density(mol, str(out / "dens.cube"), dm, nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
+    surf = read_cube(out / "dens.cube").contour([ISO], scalars="rho").smooth_taubin(n_iter=30).compute_normals()
+    pts = surf.points / B2A
+    V = np.zeros(len(pts))
+    for i in range(0, len(pts), 1500):   # chunked to limit memory
+        p = pts[i:i + 1500]
+        V[i:i + 1500] = -np.einsum("ijp,ij->p", df.incore.aux_e2(mol, gto.fakemol_for_charges(p)), dm)  # electrons
+    for zc, R in zip(mol.atom_charges(), mol.atom_coords()):
+        V += zc / np.linalg.norm(pts - R, axis=1)                                                      # nuclei
+    surf.point_data["esp"] = V
+    surf.save(out / "surf.vtk")
+
+    log.write_text(f"""input: {spec}
+name: {name}
+charge: {charge}
+atoms: {len(sym)}
+geometry: {geo}
+level of theory: {LEVEL}, density fitting (PySCF default auxiliary basis); ESP integrals exact
+SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged})
+surface: electron density isosurface rho = {ISO} a.u. (grid {GRID}^3, margin {MARGIN} bohr), {len(pts)} vertices
+ESP range on surface: {V.min():.4f} to {V.max():.4f} a.u.
+software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
+wall time: {time.time() - t0:.0f} s
+caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {LEVEL} level with PySCF {pyscf.__version__} ({geo}).
+""")
+    print(log.read_text())
+    return out
+
+
+def render(name, style="both", limit=None, view=None, root="runs"):
+    import pyvista as pv
+    from matplotlib.colors import LinearSegmentedColormap
+    from rdkit import Chem
+    out = Path(root) / name
+    sym, xyz = read_xyz(out / "mol.xyz")
+    surf = pv.read(out / "surf.vtk")
+
+    col = {"H": "#f2f2f2", "C": "#7f7f7f", "N": "#1f3fff", "O": "#ff1f1f", "S": "#e6c619", "Cl": "#1fd01f"}
+    rcov = [Chem.GetPeriodicTable().GetRcovalent(s) for s in sym]
+
+    def molecule(p):
+        for s, r in zip(sym, xyz):
+            p.add_mesh(pv.Sphere(radius=0.17 if s == "H" else 0.30, center=r,theta_resolution=40, phi_resolution=40),
+                       color=col.get(s, "#ff69b4"), smooth_shading=True, specular=0.8, specular_power=40)
+        for i in range(len(sym)):
+            for j in range(i + 1, len(sym)):
+                if np.linalg.norm(xyz[i] - xyz[j]) < 1.25 * (rcov[i] + rcov[j]):
+                    mid = (xyz[i] + xyz[j]) / 2   # two-tone bond, like GaussView
+                    for a, b, s in ((xyz[i], mid, sym[i]), (mid, xyz[j], sym[j])):
+                        p.add_mesh(pv.Cylinder(center=(a + b) / 2, direction=b - a, radius=0.08,
+                                               height=np.linalg.norm(b - a), resolution=30),
+                                   color=col.get(s, "#ff69b4"), smooth_shading=True, specular=0.6)
+
+    ev = np.linalg.svd(xyz - xyz.mean(0))[2]   # principal axes: long, middle, thin
+
+    def shoot(path, add_surface=None):
+        p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
+        p.set_background("white")
+        p.enable_depth_peeling(20)            # without it the transparent surface bands
+        p.enable_anti_aliasing("ssaa")
+        molecule(p)
+        if add_surface:
+            add_surface(p)
+        if view is None:                      # look down the thinnest axis, long axis horizontal
+            p.view_vector(ev[2], viewup=ev[1])
+        else:
+            v = np.asarray(view, float)
+            p.view_vector(v, viewup=ev[1] if abs(v @ ev[1]) < 0.9 * np.linalg.norm(v) else ev[0])
+        p.camera.zoom(1.5)
+        p.screenshot(path)
+        p.close()
+
+    cmaps = {  # same convention in every style: red = negative, blue = positive
+        "rainbow": LinearSegmentedColormap.from_list("gv", ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff"]),
+        "rwb": LinearSegmentedColormap.from_list("rwb", ["#e8413a", "#ffffff", "#3a4fe8"]),
+    }
+    shoot(out / "ball.png")
+    notes = []
+    for st in (["rainbow", "rwb"] if style == "both" else [style]):
+        lim = limit if limit is not None else LIMITS[st]
+        shoot(out / f"{st}_esp.png", lambda p: p.add_mesh(
+            surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.55, smooth_shading=True, specular=0.3,
+            scalar_bar_args=dict(title="ESP (a.u.)", fmt="%.3f", n_labels=5, color="black", vertical=True,
+                                 position_x=0.88, position_y=0.2, width=0.05, height=0.6,
+                                 title_font_size=28, label_font_size=24)))
+        notes.append(f"{st}_esp.png: colour scale -{lim} to +{lim} a.u. ({st}; red = negative, blue = positive; "
+                     f"values beyond the limits are shown at the end colours)")
+    (out / "caption.txt").write_text((out / "method.txt").read_text() + "\n".join(notes) +
+                                     f"\nrendering: PyVista {pv.__version__}, VTK {'.'.join(map(str, pv.vtk_version_info))}\n")
+    print(f"wrote PNGs to {out}")
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("calc", help="geometry + DFT + ESP surface (minutes)")
+    c.add_argument("input", help="SMILES string or .xyz file")
+    c.add_argument("--name", required=True, help="run name; results go to runs/<name>/")
+    c.add_argument("--charge", type=int, default=0, help="total charge (.xyz input only; SMILES carries its own)")
+    c.add_argument("--opt", action="store_true", help="DFT geometry optimisation first (pip install geometric; 30-60 min)")
+    c.add_argument("--force", action="store_true", help="recompute even if results exist")
+    r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
+    r.add_argument("name")
+    r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
+    r.add_argument("--limit", type=float, help="colour limit in a.u. (default 0.06 rainbow, 0.03 rwb)")
+    r.add_argument("--view", type=lambda s: [float(x) for x in s.split(",")],
+                   help="camera direction, e.g. --view=0,0,1 (default: along the thinnest molecular axis)")
+    a = ap.parse_args()
+    if a.cmd == "calc":
+        calc(a.input, a.name, a.charge, a.opt, a.force)
+    else:
+        render(a.name, a.style, a.limit, a.view)
