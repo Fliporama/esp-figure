@@ -23,6 +23,7 @@ if ($LASTEXITCODE -eq 0) { Write-Host "Branch $branch already exists."; exit 1 }
 $logs = "$wt\night\logs"; New-Item -ItemType Directory -Force $logs | Out-Null
 $settings = "$wt\night\settings.json"
 Write-Host "Night $branch : stop at $stop"
+$env:MSYS_NO_PATHCONV = '1'   # claude's Bash is Git Bash: stop it rewriting /root and /mnt paths for wsl
 Set-NoSleep
 try {
     Write-Utf8 "$wt\night\queue.txt" ''
@@ -56,7 +57,7 @@ try {
 
     $bad = { param($r) $r.TimedOut -or $r.ExitCode -ne 0 }
     if ((& $bad $r1) -or (& $bad $r3)) {
-        $tail = { param($f) if (Test-Path $f) { (Get-Content $f -Tail 40) -join "`n" } else { '(no log)' } }
+        $tail = { param($f) if (Test-Path $f) { (Get-Content $f -Tail 40 -Encoding UTF8) -join "`n" } else { '(no log)' } }
         Write-Utf8 "$wt\NIGHT_REPORT.md" (@(
             "# Night report $branch (FALLBACK: written by night.ps1)", '',
             'A Claude phase failed, timed out or ran out of usage. Verdict: do not merge without a look.', '',
