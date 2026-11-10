@@ -15,7 +15,8 @@ The coding phase and the job queue have finished. Check, report, commit. Do not 
       reason. ❌ if any regression check fails.
    3. **Checks**: a table of name, value, limit, pass/fail (regression and sanity).
    4. **Done tonight**: per item, one line that teaches the method, plus the commit hash.
-   5. **Figures**: relative links to the new PNGs.
+   5. **Figures**: links to `night/figures/<name>/rwb_esp.png` (and the others).
+      `runs/` is git-ignored, so the script copies the PNGs there after you finish.
    6. **Candidate references**: new numbers the user could add to `reference.json`.
    7. **Run info**: phase times (from `night/logs/`), anything cut short, and changed files (`git diff --stat main`).
 6. Update `night/STATE.md`. Tick a roadmap box in `IMPROVEMENTS.md` **only** if
