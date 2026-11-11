@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
 
@@ -21,6 +21,7 @@ LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
+SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
 # H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
 # Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
 PAM3 = "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O"
@@ -138,10 +139,14 @@ def geometry(spec, charge, no_hbond=False):
             ("syndiotactic H-capped PAM trimer, " if spec == PAM3 else "") + f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
 
 
-def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False):
+def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
+    if solvent:
+        if solvent not in SOLVENTS:
+            sys.exit(f"unknown solvent {solvent}; supported: {', '.join(SOLVENTS)}")
+        level += f" + IEF-PCM({solvent}, eps {SOLVENTS[solvent]})"
     if log.exists() and not force:
         text = log.read_text(encoding="utf-8")
         first = text.splitlines()[0]
@@ -166,6 +171,10 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         mf.xc = "b3lyp"
         if d3:
             mf.disp = "d3bj"   # pip install pyscf-dispersion; post-SCF energy term, density and ESP unchanged
+        if solvent:            # IEF-PCM: polarises the density, so it changes energy, geometry (with --opt) and ESP
+            mf = mf.PCM()
+            mf.with_solvent.method = "IEF-PCM"
+            mf.with_solvent.eps = SOLVENTS[solvent]
         mf.kernel()
         return mf
 
@@ -195,6 +204,13 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
+    if solvent:
+        ws = mf.with_solvent
+        disp += (f"\nsolvent: implicit {solvent}, IEF-PCM eps {ws.eps} (PySCF; default vdW radii x {ws.vdw_scale}, "
+                 f"Lebedev order {ws.lebedev_order}), in the SCF"
+                 f"{' and the optimisation' if opt else ' only (geometry not optimised in solvent)'}; "
+                 "SCF energy is the total energy in solvent; mapped ESP is "
+                 "nuclei + solvated electron density (PCM surface charges not included)")
 
     log.write_text(f"""input: {spec}
 name: {name}
@@ -311,6 +327,7 @@ if __name__ == "__main__":
     c.add_argument("--force", action="store_true", help="recompute even if results exist")
     c.add_argument("--no-hbond", action="store_true", help="take the lowest-MMFF conformer with no intramolecular H-bond")
     c.add_argument("--d3", action="store_true", help="add D3(BJ) dispersion (pip install pyscf-dispersion); changes energies, not the ESP")
+    c.add_argument("--solvent", choices=sorted(SOLVENTS), help="implicit solvent (IEF-PCM) for SCF, --opt and ESP (slower)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -321,6 +338,6 @@ if __name__ == "__main__":
     r.add_argument("--hbonds", action="store_true", help="draw intramolecular H-bonds as dashed lines")
     a = ap.parse_args()
     if a.cmd == "calc":
-        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3)
+        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent)
     else:
         render(a.name, a.style, a.limit, a.view, extrema=a.extrema, hbond_lines=a.hbonds)
