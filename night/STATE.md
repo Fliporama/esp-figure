@@ -3,6 +3,12 @@
 ## Done
 - Stereo, guards, full element colour table (day session 2026-11-11; sanity checks pass).
   `esp_figure.PAM3` is the syndiotactic SMILES; unspecified-stereo SMILES are now refused.
+- Dry run 2026-11-11: asked for "Full element colour table" only. It was already checked in the
+  roadmap and listed here, so nothing was built, tested, reviewed or queued. The colour sanity
+  script was not re-run (the WSL command needed approval in this session).
+- Dry run review 2026-11-11: regression 4/4 pass; sanity stereo/guards/colours pass, d3/solvent/
+  restart/rerank skip (not built). Queue job `dry_water` ran and rendered. settings.json warns
+  `Write(./**)` is ineffective (use `Edit(./**)`); flagged in NIGHT_REPORT.md.
 
 ## Skipped (waiting on you)
 
