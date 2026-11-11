@@ -1,0 +1,10 @@
+# Same line endings whether committed from WSL or Windows git.
+# Text files are stored as LF in the repo; Windows git may check them out as CRLF.
+* text=auto
+
+# PowerShell scripts: CRLF in the working tree (Windows PowerShell 5.1).
+*.ps1 text eol=crlf
+
+# Python and shell scripts run in WSL: always LF.
+*.py  text eol=lf
+*.sh  text eol=lf
