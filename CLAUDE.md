@@ -67,6 +67,12 @@ First target molecule: polyacrylamide (PAM) oligomer.
   the interface built in d4afae9 (`esp_extrema`, `hbond_pairs`); extrema
   passes, bonds fails until `bond_list` (double sticks) exists. A PAM3
   frequency run (~1 h) is a queue job, not a sanity check.
+- **Pending fix (do before the next night run, user approved 2026-11-11):**
+  `night/sanity/bonds.py` exits 1 (fail) when `bond_list` is missing; per the
+  convention it must exit 77 (not built) for that half, while still checking
+  the H-bond half (passes now). Otherwise the night's sanity run reports a
+  failure and the review verdict gets ⚠️/❌ for an unbuilt feature. After the
+  edit: run `night/sanity/bonds.py`, expect exit 77; commit, push.
 
   | Item | Run | Pass if |
   |---|---|---|
