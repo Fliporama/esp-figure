@@ -37,8 +37,9 @@ First target molecule: polyacrylamide (PAM) oligomer.
 - Gas-phase syndiotactic control done 2026-11-11 (B3LYP/6-31G(d), no D3, no solvent):
   `runs/pam3s_gas_fold` E -782.485784, 1 H-bond (H26...O16 2.00 A), ESP -0.071/+0.082;
   `runs/pam3s_gas_ext` E -782.475815, 0 H-bonds (stayed open), ESP -0.066/+0.069.
-  Folded lower by 6.3 kcal/mol (pilot, unspecified stereo: 5.5). Compare with tonight's
-  pam3s_fold/pam3s_ext (--d3 --solvent water) to separate the solvent/dispersion effects.
+  Folded lower by 6.3 kcal/mol (pilot, unspecified stereo: 5.5). Compare with the queued
+  pam3s_fold/pam3s_ext (--d3 --solvent water; not run yet, need solvent/restart/rerank
+  built first) to separate the solvent/dispersion effects.
 - Night runner (autonomous overnight work) designed and planned:
   `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
   `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main
