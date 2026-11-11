@@ -1,0 +1,21 @@
+PASS stereo (Stereo: require or set tacticity in SMILES)
+  PASS same molecule as PAM3: C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O
+  PASS 3 stereocentres, all specified: 3 centres, specified: ['Specified', 'Specified', 'Specified']
+  PASS all conformers are the input isomer: 50/50 match
+  PASS syndiotactic (amide sides alternate along the zigzag): sides [1, -1, 1]
+PASS guards (Guards with clear errors)
+  PASS guard [CH3]: exit 1; 'odd number of electrons (radical / open-shell): only closed-shell RKS is supported; check the charge, or add the missing H'
+  PASS guard [Pd]: exit 1; 'unsupported element(s) Pd: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si'
+  PASS guard CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O: exit 1; 'unspecified stereo (stereocentre at atom 1, stereocentre at atom 6, stereocentre at atom 11): write @/@@ or /\\ into the SMILES, e.g. syndiotactic PAM3 C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O'
+SKIP d3 (D3(BJ) dispersion)
+  SKIP: calc() has no 'd3' argument yet
+SKIP solvent (Implicit solvent --solvent water)
+  SKIP: calc() has no 'solvent' argument yet
+SKIP restart (Restart / checkpoint for --opt)
+  SKIP: esp_figure.py does not write opt_traj.xyz yet
+SKIP rerank (DFT re-ranking of top MMFF conformers)
+  SKIP: calc() has no 'rerank' argument yet
+PASS colours (Full element colour table)
+  PASS P/Si/Br/I coloured, not pink: {'P': '#ff8000', 'Si': '#f0c8a0', 'Br': '#a62929', 'I': '#940094'}
+  PASS H/C/N/O/S/Cl unchanged: {'H': '#f2f2f2', 'C': '#7f7f7f', 'N': '#1f3fff', 'O': '#ff1f1f', 'S': '#e6c619', 'Cl': '#1fd01f'}
+  PASS render uses COLORS: 172191 green px, 0 pink px

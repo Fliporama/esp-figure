@@ -1,0 +1,12 @@
+I ran the review and committed the report as `c898520 night: report` on `night/2026-11-11-dry`. I didn't push; the night script does that.
+
+**Verdict: ✅ merge, low stakes.** This was a dry run, so no code changed. The branch only adds a note in `night/STATE.md` and the new `NIGHT_REPORT.md`.
+
+**One thing to fix before the first real night:** both phase 1 and phase 3 logged that the `Write(./**)` rule in `night/settings.json` does nothing; it should be `Edit(./**)`. I'm not allowed to edit that file, so the change is yours. Phase 1 also said that running Python through `wsl` and `git commit` both asked for approval in its session. If that happens on a real night, nobody is there to approve, so the agent couldn't run tests or commit. Please check that both are in the allow list.
+
+- **Regression checks:** all 4 pass (water test, and the PAM3 single-point energy and ESP min/max match reference).
+- **Sanity checks:** stereo, guards and colours pass. D3, solvent, restart and re-ranking are skipped because they aren't built yet; those are the real week-1 work.
+- **Coding phase:** built nothing, which is correct. Its only task was the colour table, and that was already done.
+- **Queue:** the one test job (`dry_water`) finished in 10 s and matched the regression water run. I rendered it: red at the oxygen, blue at the hydrogens, colour bar labelled ±0.030 a.u.
+- **Roadmap:** no boxes ticked in `IMPROVEMENTS.md`, since no new item passed a sanity check.
+- **Phase 1 hadn't committed** its `night/STATE.md` note, so I included it in this commit.

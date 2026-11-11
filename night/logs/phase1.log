@@ -1,0 +1,7 @@
+The dry run had nothing to build: "Full element colour table" was already finished in the day session, so I stopped there.
+
+- **Already done:** the roadmap item is checked in `IMPROVEMENTS.md` (line 114), and `night/STATE.md` "Done" lists it with the note "sanity checks pass". `code.md` only picks unchecked items, so nothing was written, tested, reviewed or queued.
+- **Not re-checked:** running the colour sanity script (`night/sanity/colours.py`) through `wsl` needed approval in this session, so I couldn't confirm it still passes.
+- **Not committed:** I added a dry-run note under "Done" in `night/STATE.md`. Committing it also needed approval, so the edit is in the worktree but not committed.
+
+One thing for the real night: `code.md` steps 3 and 5 run `wsl ... python` and `git commit`. In this session both needed approval, so with nobody there to approve them the night agent couldn't run tests or commit. Check that `night/settings.json` allows these two commands (I haven't opened it). The permission probes in the earlier dry runs may have used different settings than this session.
