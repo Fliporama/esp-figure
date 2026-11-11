@@ -41,6 +41,10 @@ def read_xyz(path):
     return [r[0] for r in rows], np.array([r[1:4] for r in rows], float)
 
 
+def xyz_text(sym, xyz, comment):
+    return f"{len(sym)}\n{comment}\n" + "".join(f"{s} {x:.6f} {y:.6f} {z:.6f}\n" for s, (x, y, z) in zip(sym, xyz))
+
+
 def read_cube(path):
     """Gaussian cube (bohr) -> PyVista grid (Å) with point data 'rho'."""
     import pyvista as pv
@@ -163,6 +167,20 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 
     t0 = time.time()
     sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond)
+    # Restart: --opt appends every step to opt_traj.xyz; a rerun after a crash (no method.txt) resumes from the last frame.
+    traj, tag, done = out / "opt_traj.xyz", f"{spec} | {level} | charge {charge} | no-hbond {no_hbond}", 0
+    if force:
+        traj.unlink(missing_ok=True)
+    if opt and traj.exists():
+        L = traj.read_text(encoding="utf-8").splitlines()
+        done = len(L) // (len(sym) + 2)                  # complete frames; a frame cut off by a kill is dropped
+        last = L[(done - 1) * (len(sym) + 2):done * (len(sym) + 2)]
+        if not done or last[0] != str(len(sym)) or not last[1].startswith(tag + " |") or [r.split()[0] for r in last[2:]] != sym:
+            sys.exit(f"{traj} is from a different molecule, charge, conformer choice or level of theory. "
+                     "Delete it, or use --force.")
+        traj.write_text("\n".join(L[:done * (len(sym) + 2)]) + "\n", encoding="utf-8")
+        xyz = np.array([r.split()[1:4] for r in last[2:]], float)
+        geo = f"{geo}; restarted from step {done} of an interrupted optimisation"
     mol = gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, xyz)],
                 charge=charge, basis="6-31g*", verbose=0)
 
@@ -181,15 +199,20 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     mf = scf(mol)
     if opt:
         from pyscf.geomopt.geometric_solver import optimize   # pip install geometric
-        mol = optimize(mf)
+        steps = []
+
+        def frame(env):                        # called by geomeTRIC once per step
+            steps.append(env["energy"])
+            with traj.open("a", encoding="utf-8") as f:
+                f.write(xyz_text(sym, env["mol"].atom_coords() * B2A, f"{tag} | step {done + len(steps)} E {env['energy']:.10f}"))
+        mol = optimize(mf, callback=frame)
         mf = scf(mol)
         geo = f"{level} optimised geometry (geomeTRIC), started from {geo}"
     if not mf.converged:
         print("WARNING: SCF did not converge; results are not trustworthy", file=sys.stderr)
     dm = mf.make_rdm1()
     xyz = mol.atom_coords() * B2A
-    (out / "mol.xyz").write_text(f"{len(sym)}\n{name}\n" + "".join(
-        f"{s} {x:.6f} {y:.6f} {z:.6f}\n" for s, (x, y, z) in zip(sym, xyz)))
+    (out / "mol.xyz").write_text(xyz_text(sym, xyz, name))
 
     # Surface: isosurface of the density. ESP only at its vertices (full-grid ESP is >10x slower).
     cubegen.density(mol, str(out / "dens.cube"), dm, nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
@@ -216,7 +239,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 name: {name}
 charge: {charge}
 atoms: {len(sym)}
-geometry: {geo}
+geometry: {geo}{f"{chr(10)}optimisation steps: {len(steps)} (this run; trajectory in opt_traj.xyz)" if opt else ""}
 intramolecular H-bonds in final geometry (H···N/O < {HB_CUT} Å): {hbonds(rdm, xyz) if rdm else "n/a"}
 level of theory: {level}, density fitting (PySCF default auxiliary basis); ESP integrals exact
 SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
