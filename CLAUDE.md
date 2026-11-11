@@ -65,7 +65,7 @@ First target molecule: polyacrylamide (PAM) oligomer.
   3844.3 cm⁻¹ (±5), planar NH₃ 1 imaginary; water HOMO = O lone pair
   (85 %); CH₃ UKS ⟨S²⟩ 0.754, ESP −0.016..+0.019. `extrema`/`bonds` follow
   the interface built in d4afae9 (`esp_extrema`, `hbond_pairs`); extrema
-  passes, bonds fails until `bond_list` (double sticks) exists. A PAM3
+  passes, bonds skips (77) until `bond_list` (double sticks) exists. A PAM3
   frequency run (~1 h) is a queue job, not a sanity check.
 - bonds.py fixed 2026-11-11: exits 77 while double sticks are unbuilt (H-bond half passing), 1 if the H-bond half fails.
 
