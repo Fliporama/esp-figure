@@ -242,7 +242,8 @@ def render(name, style="both", limit=None, view=None, root="runs"):
     for st in (["rainbow", "rwb"] if style == "both" else [style]):
         lim = limit if limit is not None else LIMITS[st]
         shoot(out / f"{st}_esp.png", lambda p: p.add_mesh(
-            surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.55, smooth_shading=True, specular=0.3,
+            surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.3,
+            culling="back",   # hide the far side: seen through the near side at grazing angles it shows as jagged stripes
             scalar_bar_args=dict(title="ESP (a.u.)\n", fmt="%.3f", n_labels=5, color="black", vertical=True,
                                  position_x=0.88, position_y=0.2, width=0.05, height=0.6,
                                  title_font_size=28, label_font_size=24)))

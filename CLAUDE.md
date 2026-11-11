@@ -131,7 +131,10 @@ Observed ESP range for the PAM trimer: −0.065 to +0.071 a.u. → colour limits
 2. **Grid box too tight → holes in the surface** near carbonyl oxygens.
    Use `cubegen.density(..., margin=6.0)` (bohr) or more; default is too small.
 3. **Transparent surface shows dark banding** unless depth peeling is on:
-   `plotter.enable_depth_peeling(20)`.
+   `plotter.enable_depth_peeling(20)`. It also needs `culling="back"` on the
+   surface: otherwise the far side shows through as jagged stripes on compact
+   (DFT-optimised, folded) shapes. Opacity 0.7 keeps the colours as strong as
+   the old two-layer 0.55.
 4. **Camera angle**: look along the molecule's thinnest principal axis, with
    the long axis horizontal (SVD of centred coordinates), so the chain lies flat.
 5. Cube files are in **bohr**; PyVista scene is in Å. Convert with 0.529177.
