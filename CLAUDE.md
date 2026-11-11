@@ -48,7 +48,8 @@ First target molecule: polyacrylamide (PAM) oligomer.
   `night.ps1` runs it after phase 1, before the queue → `night/sanity_result.json`.
   Limits checked against real numbers: D3 −41.6/−41.1 kcal/mol (folded
   favoured by 0.6), water ΔG_solv −6.5 kcal/mol, formamide restart dE 4e-8 Eh
-  in 6 vs 7 steps. Syndiotactic PAM3 (verified by `stereo.py`):
+  in 6 vs 7 steps; PAM3 PCM ESP extremes +15–20 %, fold−ext −5.5 → −2.4
+  kcal/mol. Syndiotactic PAM3 (verified by `stereo.py`):
   `C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O`.
 
   | Item | Run | Pass if |
