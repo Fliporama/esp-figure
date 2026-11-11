@@ -58,6 +58,15 @@ First target molecule: polyacrylamide (PAM) oligomer.
   table, D3 (`--d3`, off by default; method.txt adds "dispersion energy"). **Unspecified-stereo SMILES (e.g. the old PAM3 one in examples
   below) are now refused.** Decisions for D3/solvent/re-ranking/redo jobs
   are in `night/STATE.md` Answers.
+- **Week-2 sanity checks built 2026-11-11** (table approved as is): `freq`,
+  `orbitals`, `extrema`, `bonds`, `uks` in `night/sanity/`. Each was tested
+  against a throwaway reference implementation (all pass) and against one
+  deliberate bug each (all caught). References: water freqs 1710.7/3720.5/
+  3844.3 cm⁻¹ (±5), planar NH₃ 1 imaginary; water HOMO = O lone pair
+  (85 %); CH₃ UKS ⟨S²⟩ 0.754, ESP −0.016..+0.019. `extrema`/`bonds` follow
+  the interface built in d4afae9 (`esp_extrema`, `hbond_pairs`); extrema
+  passes, bonds fails until `bond_list` (double sticks) exists. A PAM3
+  frequency run (~1 h) is a queue job, not a sanity check.
 
   | Item | Run | Pass if |
   |---|---|---|

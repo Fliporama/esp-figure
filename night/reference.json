@@ -13,6 +13,11 @@
   "solvent": {"script": "night/sanity/solvent.py", "item": "Implicit solvent --solvent water", "timeout": 2400},
   "restart": {"script": "night/sanity/restart.py", "item": "Restart / checkpoint for --opt", "timeout": 1800},
   "rerank":  {"script": "night/sanity/rerank.py",  "item": "DFT re-ranking of top MMFF conformers", "timeout": 2400},
-  "colours": {"script": "night/sanity/colours.py", "item": "Full element colour table", "timeout": 300}
+  "colours": {"script": "night/sanity/colours.py", "item": "Full element colour table", "timeout": 300},
+  "freq":     {"script": "night/sanity/freq.py",     "item": "Frequency check, confirm minimum", "timeout": 1200},
+  "orbitals": {"script": "night/sanity/orbitals.py", "item": "HOMO/LUMO surfaces", "timeout": 600},
+  "extrema":  {"script": "night/sanity/extrema.py",  "item": "ESP min/max markers on the map", "timeout": 600},
+  "bonds":    {"script": "night/sanity/bonds.py",    "item": "H-bonds as dashed lines, double bonds as double sticks", "timeout": 300},
+  "uks":      {"script": "night/sanity/uks.py",      "item": "Open-shell UKS", "timeout": 900}
  }
 }
