@@ -36,8 +36,9 @@ First target molecule: polyacrylamide (PAM) oligomer.
   (left amide points at the camera).
 - Night runner (autonomous overnight work) designed and planned:
   `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
-  `docs/superpowers/plans/2026-11-11-night-runner.md`; built on branch
-  `night-runner`.
+  `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main
+  2026-11-11 (dry runs + permission probes passed). Before the first real
+  night: sanity entries for week-1 items in `night/reference.json`.
 
 ## This machine
 
