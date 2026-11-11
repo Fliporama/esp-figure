@@ -39,6 +39,25 @@ First target molecule: polyacrylamide (PAM) oligomer.
   `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main
   2026-11-11 (dry runs + permission probes passed). Before the first real
   night: sanity entries for week-1 items in `night/reference.json`.
+- **Pending task: sanity checks for week 1** (drafted 2026-11-11, NOT yet
+  approved: ask the user to approve the table and the install first).
+  Write them myself (tests first) and lock them like reference.json; the night
+  agent only implements features. Mechanism: extend `night/check.py` for the
+  energy/ESP comparisons, plus small scripts in `night/sanity/` (add
+  `Edit(night/sanity/**)` to the deny list in `night/settings.json`).
+
+  | Item | Run | Pass if |
+  |---|---|---|
+  | Stereo (syndiotactic) | agent's PAM3 SMILES | 3 centres specified; 50/50 conformers same isomer; all-trans zigzag backbone → adjacent CONH₂ on opposite sides |
+  | Guards | `[CH3]`, `[Pd]`, unspecified-stereo PAM3 | clear error naming radical/element/stereo; water still runs |
+  | D3 | folded + extended PAM3 geoms (`runs/pam3_opt`, `runs/pam3_ext_opt` → copy to `night/baseline/`), ± `--d3` | E_disp < 0 and 5–60 kcal/mol in size; D3 favours folded more; ESP unchanged ±1e-4 |
+  | Solvent (PCM) | water + both PAM3 geoms, gas vs `--solvent water` | water ΔG_solv −3 to −12 kcal/mol; abs(ESP min) and ESP max grow, by < 50 %; E(fold)−E(ext) rises above gas −5.5 kcal/mol |
+  | Restart | formamide `--opt` killed after 3 steps, resumed | same final E ±1e-6 Eh, fewer steps |
+  | Re-ranking | `--rerank 5` on PAM3 | 5 DFT energies in method.txt; chosen = lowest |
+  | Colours | molecule with P, Si, Br, I | no pink "unknown"; H/C/N/O/S/Cl unchanged |
+
+  Open decision: install `pyscf-dispersion` into `/root/esp-venv` for D3
+  (night agent may not install; otherwise D3 is skipped and asked about).
 
 ## This machine
 
