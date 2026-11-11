@@ -72,21 +72,6 @@ First target molecule: polyacrylamide (PAM) oligomer.
   the interface built in d4afae9 (`esp_extrema`, `hbond_pairs`); extrema
   passes, bonds skips (77) until `bond_list` (double sticks) exists. A PAM3
   frequency run (~1 h) is a queue job, not a sanity check.
-- bonds.py fixed 2026-11-11: exits 77 while double sticks are unbuilt (H-bond half passing), 1 if the H-bond half fails.
-
-  | Item | Run | Pass if |
-  |---|---|---|
-  | Stereo (syndiotactic) | agent's PAM3 SMILES | 3 centres specified; 50/50 conformers same isomer; all-trans zigzag backbone → adjacent CONH₂ on opposite sides |
-  | Guards | `[CH3]`, `[Pd]`, unspecified-stereo PAM3 | clear error naming radical/element/stereo; water still runs |
-  | D3 | folded + extended PAM3 geoms (`runs/pam3_opt`, `runs/pam3_ext_opt` → copy to `night/baseline/`), ± `--d3` | E_disp < 0 and 5–60 kcal/mol in size; D3 favours folded more; ESP unchanged ±1e-4 |
-  | Solvent (PCM) | water + both PAM3 geoms, gas vs `--solvent water` | water ΔG_solv −3 to −12 kcal/mol; abs(ESP min) and ESP max grow, by < 50 %; E(fold)−E(ext) rises above gas −5.5 kcal/mol |
-  | Restart | formamide `--opt` killed after 3 steps, resumed | same final E ±1e-6 Eh, fewer steps |
-  | Re-ranking | `--rerank 5` on PAM3 | 5 DFT energies in method.txt; chosen = lowest |
-  | Colours | molecule with P, Si, Br, I | no pink "unknown"; H/C/N/O/S/Cl unchanged |
-
-  Open decision: install `pyscf-dispersion` into `/root/esp-venv` for D3
-  (night agent may not install; otherwise D3 is skipped and asked about).
-
 ## This machine
 
 Ubuntu 26.04 in WSL, installed with `--no-launch`, so **root only, no Linux
@@ -97,24 +82,6 @@ the quoting):
 ```powershell
 wsl -d Ubuntu -u root --cd "/mnt/c/dev/molcule visualizer" -e /root/esp-venv/bin/python esp_figure.py render pam3
 ```
-
-## Setup
-
-PySCF does **not** run natively on Windows. On Windows:
-
-1. PowerShell (admin): `wsl --install` → reboot → set up Ubuntu user.
-2. VS Code: install the **WSL** extension, then "WSL: Connect to WSL" and open
-   the repo folder from inside WSL (`code .` from the Ubuntu terminal works).
-3. In the WSL terminal:
-
-```bash
-sudo apt update && sudo apt install -y python3-venv python3-pip libgl1 libxrender1
-python3 -m venv .venv && source .venv/bin/activate
-pip install --prefer-binary pyscf rdkit pyvista vtk matplotlib pillow
-```
-
-Offscreen rendering works without a display (a harmless
-`bad X server connection` warning may print).
 
 ## Method (keep these defaults unless the user changes them)
 
@@ -142,7 +109,7 @@ Observed ESP range for the PAM trimer: −0.065 to +0.071 a.u. → colour limits
 
 1. **Full-grid ESP is too slow.** `pyscf.tools.cubegen.mep` on an 80³ grid ran
    >10 min. Instead: compute density cube → extract isosurface → ESP only at
-   its ~25k vertices (~1 min). Snippet below.
+   its ~25k vertices (~1 min), as `calc()` in `esp_figure.py` does.
 2. **Grid box too tight → holes in the surface** near carbonyl oxygens.
    Use `cubegen.density(..., margin=6.0)` (bohr) or more; default is too small.
 3. **Transparent surface shows dark banding** unless depth peeling is on:
@@ -153,53 +120,6 @@ Observed ESP range for the PAM trimer: −0.065 to +0.071 a.u. → colour limits
 4. **Camera angle**: look along the molecule's thinnest principal axis, with
    the long axis horizontal (SVD of centred coordinates), so the chain lies flat.
 5. Cube files are in **bohr**; PyVista scene is in Å. Convert with 0.529177.
-
-Core ESP-on-surface snippet (works):
-
-```python
-from pyscf import gto, df
-pts = surf.points / 0.529177            # Å -> bohr
-V = np.zeros(len(pts))
-for i in range(0, len(pts), 1500):      # chunk to limit memory
-    p = pts[i:i+1500]
-    V[i:i+1500] = -np.einsum("ijp,ij->p",
-        df.incore.aux_e2(mol, gto.fakemol_for_charges(p)), dm)   # electrons
-for z, R in zip(mol.atom_charges(), mol.atom_coords()):
-    V += z / np.linalg.norm(pts - R, axis=1)                     # nuclei
-```
-
-## Prototype files
-
-Copy these into `prototype/` (they were sent as chat attachments):
-
-- `calc.py` — SMILES → MMFF geometry → B3LYP SCF → density cube → isosurface
-  → ESP at vertices → `surf.vtk`
-- `render_lib.py` — `read_cube()` helper
-- `render.py` — ball-and-stick + two ESP styles → PNGs
-
-Known prototype limits: molecule is hard-coded, no colour bar, no method log,
-SCF is rerun every time, H-capped trimer instead of the reference figure's
-exact end groups.
-
-## Proposed design for `esp_figure.py` (confirm with user before building)
-
-One command, two stages, so appearance tweaks don't redo the chemistry:
-
-```bash
-python esp_figure.py calc   "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt]
-python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view x,y,z]
-```
-
-- `calc` saves to `runs/<name>/`: `mol.xyz`, `surf.vtk` (with ESP), `method.txt`.
-  Skips work if results already exist (unless `--force`).
-- `--opt` runs a DFT geometry optimisation (PySCF + geomeTRIC) before the ESP.
-  Off by default for drafts; on for final figures. Can take 30–60 min.
-- `render` reads `runs/<name>/` only; takes seconds. Adds a labelled colour bar.
-- Input can be a SMILES string or an `.xyz` file.
-- One file is fine; split only if it grows past what is easy to read.
-
-Test: `test_water.py` — water molecule, check ESP is negative near O and
-positive near the H atoms, and the range is roughly ±0.05–0.1 a.u.
 
 ## Model improvements
 
@@ -229,7 +149,6 @@ powershell -ExecutionPolicy Bypass -File night\night.ps1 -StopBy 04:00
 
 ## Open questions for the user
 
-- Laptop OS (Windows → WSL needed)?
 - Exact structure for the final figures (end groups, ester end, crosslinker)?
 - Do figures need to match a journal or report style (size, font, DPI)?
 
