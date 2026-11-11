@@ -56,9 +56,9 @@ Assert (@($msgs | Where-Object { $_ -match 'claude' }).Count -ge 1) "claude miss
 
 # Clear-NightLeftovers: last night's logs/report/check result must not be read as tonight's
 New-Item -ItemType Directory -Force "$tmp\wt\night\logs" | Out-Null
-'x' | Set-Content "$tmp\wt\night\logs\phase2.log"; 'x' | Set-Content "$tmp\wt\NIGHT_REPORT.md"; 'x' | Set-Content "$tmp\wt\night\check_result.json"
+'x' | Set-Content "$tmp\wt\night\logs\phase2.log"; 'x' | Set-Content "$tmp\wt\NIGHT_REPORT.md"; 'x' | Set-Content "$tmp\wt\night\check_result.json"; 'x' | Set-Content "$tmp\wt\night\sanity_result.json"
 Clear-NightLeftovers "$tmp\wt"
-Assert (-not (Test-Path "$tmp\wt\night\logs\phase2.log") -and -not (Test-Path "$tmp\wt\NIGHT_REPORT.md") -and -not (Test-Path "$tmp\wt\night\check_result.json")) 'leftovers cleared'
+Assert (-not (Test-Path "$tmp\wt\night\logs\phase2.log") -and -not (Test-Path "$tmp\wt\NIGHT_REPORT.md") -and -not (Test-Path "$tmp\wt\night\check_result.json") -and -not (Test-Path "$tmp\wt\night\sanity_result.json")) 'leftovers cleared'
 Assert (Test-Path "$tmp\wt\night\logs") 'logs dir kept'
 
 # Write-FallbackReport: keeps the agent's report when only phase 1 failed, replaces it when phase 3 failed

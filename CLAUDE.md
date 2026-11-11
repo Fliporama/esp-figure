@@ -39,12 +39,17 @@ First target molecule: polyacrylamide (PAM) oligomer.
   `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main
   2026-11-11 (dry runs + permission probes passed). Before the first real
   night: sanity entries for week-1 items in `night/reference.json`.
-- **Pending task: sanity checks for week 1** (drafted 2026-11-11, NOT yet
-  approved: ask the user to approve the table and the install first).
-  Write them myself (tests first) and lock them like reference.json; the night
-  agent only implements features. Mechanism: extend `night/check.py` for the
-  energy/ESP comparisons, plus small scripts in `night/sanity/` (add
-  `Edit(night/sanity/**)` to the deny list in `night/settings.json`).
+- **Week-1 sanity checks built 2026-11-11** (table approved as is;
+  `pyscf-dispersion` 1.7.0 installed). One script per row in `night/sanity/`
+  (locked, listed under `sanity` in `night/reference.json`); each docstring is
+  the interface contract the night agent must implement (`PAM3`, `COLORS`,
+  `calc(d3=, solvent=, rerank=)`, `opt_traj.xyz`, method.txt lines). Exit 0
+  pass / 1 fail / 77 not built. `night/check.py --sanity` runs them;
+  `night.ps1` runs it after phase 1, before the queue → `night/sanity_result.json`.
+  Limits checked against real numbers: D3 −41.6/−41.1 kcal/mol (folded
+  favoured by 0.6), water ΔG_solv −6.5 kcal/mol, formamide restart dE 4e-8 Eh
+  in 6 vs 7 steps. Syndiotactic PAM3 (verified by `stereo.py`):
+  `C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O`.
 
   | Item | Run | Pass if |
   |---|---|---|

@@ -13,6 +13,11 @@ Take the first unchecked roadmap item not already in STATE "Done".
   install (`pip`/`apt`), do not build it. Add it to STATE "Skipped (waiting on
   you)" with the exact question and your recommendation, and go to the next item.
 - Otherwise:
+  0. If the item has a script in `night/sanity/` (see `sanity` in `night/reference.json`), read its
+     docstring first: it fixes the interface (argument names, `method.txt` lines, constants) your code must
+     provide. The scripts run after you finish and decide whether the item counts as done. You may run them
+     all with `... python night/check.py --sanity` (pass / fail / skip = not built), but D3, solvent and
+     re-ranking take 10–20 min each, so run it at most once, after your fast test passes.
   1. Implement it **behind a CLI flag**. Defaults must not change, because the
      regression check compares default output with fixed numbers.
   2. Add a fast `test_<feature>.py` (seconds to a few minutes, water or formamide) where possible.
@@ -32,7 +37,7 @@ Take the first unchecked roadmap item not already in STATE "Done".
 
 ## Rules
 - You may not edit: `night/*.ps1`, `night/code.md`, `night/review.md`,
-  `night/settings.json`, `night/reference.json`, `night/test_check.py`, `night/check.py`, `night/baseline/`,
+  `night/settings.json`, `night/reference.json`, `night/test_check.py`, `night/check.py`, `night/baseline/`, `night/sanity/`,
   `CLAUDE.md`, `test_water.py`. Never weaken a test to make it pass.
 - No git push, merge, branch changes, or installs. They're blocked anyway; don't try workarounds.
 - Follow CLAUDE.md: minimal code, stdlib and existing packages first, figure rules.

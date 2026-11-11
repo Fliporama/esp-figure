@@ -38,7 +38,14 @@ try {
     $r1 = Invoke-Capped -FilePath claude -ArgumentList @('-p', $p1, '--settings', $settings, '--output-format', 'text') `
         -WorkingDirectory $wt -TimeoutSec $cap1 -LogPath "$logs\phase1.log"
 
-    # Phase 2: compute (no tokens). Review must start by stop - 1 h.
+    # Phase 2a: locked sanity checks (night/sanity) on tonight's code; before the queue so they never cut into review.
+    $capS = [Math]::Min(7200, [int]($stop.AddHours(-1) - (Get-Date)).TotalSeconds - 900)
+    if ($capS -ge 300) {
+        Invoke-Capped -FilePath wsl -ArgumentList @('-d', 'Ubuntu', '-u', 'root', '--cd', $wtWsl, '-e', 'timeout', '-k', '60', "$capS",
+            '/root/esp-venv/bin/python', 'night/check.py', '--sanity') -WorkingDirectory $logs -TimeoutSec ($capS + 120) -LogPath "$logs\sanity.log" | Out-Null
+    } else { Write-Utf8 "$logs\sanity.log" "sanity checks not run: no time left before the review" }
+
+    # Phase 2b: compute (no tokens). Review must start by stop - 1 h.
     if ($DryRun) { Write-Utf8 "$wt\night\queue.txt" "calc O --name dry_water`n" }
     $cap2 = [Math]::Min(28800, [int]($stop.AddHours(-1) - (Get-Date)).TotalSeconds)
     $jobs = @(Invoke-Queue -QueuePath "$wt\night\queue.txt" -WorktreeWsl $wtWsl -JobTimeoutSec 14400 -TotalTimeoutSec $cap2 -LogDir $logs)

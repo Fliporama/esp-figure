@@ -14,7 +14,7 @@
       "Bash(pip:*)", "Bash(apt:*)", "Bash(curl:*)", "WebFetch", "WebSearch",
       "Edit(//c/dev/molcule visualizer/**)",
       "Edit(night/*.ps1)", "Edit(night/code.md)", "Edit(night/review.md)", "Edit(night/settings.json)",
-      "Edit(night/reference.json)", "Edit(night/test_check.py)", "Edit(night/check.py)", "Edit(night/baseline/**)",
+      "Edit(night/reference.json)", "Edit(night/test_check.py)", "Edit(night/check.py)", "Edit(night/baseline/**)", "Edit(night/sanity/**)",
       "Edit(CLAUDE.md)", "Edit(.claude/**)", "Edit(test_water.py)"
     ]
   }

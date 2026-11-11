@@ -6,5 +6,13 @@
               "esp_min": {"value": -0.0663, "tol": 1e-4},
               "esp_max": {"value": 0.078, "tol": 1e-4}}
  },
- "sanity": {}
+ "sanity": {
+  "stereo":  {"script": "night/sanity/stereo.py",  "item": "Stereo: require or set tacticity in SMILES", "timeout": 600},
+  "guards":  {"script": "night/sanity/guards.py",  "item": "Guards with clear errors", "timeout": 600},
+  "d3":      {"script": "night/sanity/d3.py",      "item": "D3(BJ) dispersion", "timeout": 1800},
+  "solvent": {"script": "night/sanity/solvent.py", "item": "Implicit solvent --solvent water", "timeout": 2400},
+  "restart": {"script": "night/sanity/restart.py", "item": "Restart / checkpoint for --opt", "timeout": 1800},
+  "rerank":  {"script": "night/sanity/rerank.py",  "item": "DFT re-ranking of top MMFF conformers", "timeout": 2400},
+  "colours": {"script": "night/sanity/colours.py", "item": "Full element colour table", "timeout": 300}
+ }
 }

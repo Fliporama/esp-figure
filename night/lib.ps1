@@ -66,7 +66,7 @@ function Get-WslPath([string]$WinPath) {
 
 function Clear-NightLeftovers([string]$Worktree) {
     # Logs, report and check result are committed each night; remove them so tonight never reads last night's.
-    Remove-Item "$Worktree\night\logs\*", "$Worktree\NIGHT_REPORT.md", "$Worktree\night\check_result.json" -Force -ErrorAction SilentlyContinue
+    Remove-Item "$Worktree\night\logs\*", "$Worktree\NIGHT_REPORT.md", "$Worktree\night\check_result.json", "$Worktree\night\sanity_result.json" -Force -ErrorAction SilentlyContinue
 }
 
 function Write-FallbackReport([string]$Path, [string]$Summary, [string]$Body, [bool]$Phase3Ok) {
