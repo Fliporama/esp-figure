@@ -155,6 +155,27 @@ positive near the H atoms, and the range is roughly ±0.05–0.1 a.u.
 Backlog of science improvements (tacticity, solvent, D3, DFT re-ranking, …)
 lives in `IMPROVEMENTS.md`. Read it before changing the method.
 
+## Night runner (autonomous overnight work)
+
+Before bed, from PowerShell in the repo (the default execution policy blocks
+scripts, hence `-ExecutionPolicy Bypass`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File night\night.ps1            # stops everything by 08:00
+powershell -ExecutionPolicy Bypass -File night\night.ps1 -StopBy 04:00
+```
+
+- Works in a separate worktree `C:\dev\esp-night` on branch `night/<date>`,
+  pushes only that branch. Read `NIGHT_REPORT.md` on it in the morning.
+- Merge: `powershell -ExecutionPolicy Bypass -File night\merge.ps1 <date>`.
+  Reject: `git worktree remove --force C:\dev\esp-night; git branch -D night/<date>`.
+- Answer the agent's questions under "Answers" in `night/STATE.md` on main.
+- Fixed checks live in `night/reference.json` (agent can't edit). Add sanity
+  entries for a roadmap item before the night that builds it.
+- Laptop: plugged in, lid open or lid-close = do nothing.
+- Spec/plan: `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
+  `docs/superpowers/plans/2026-11-11-night-runner.md`.
+
 ## Open questions for the user
 
 - Laptop OS (Windows → WSL needed)?

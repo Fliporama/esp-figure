@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Read", "Edit(./**)", "Write(./**)", "Agent", "Glob", "Grep",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)",
+      "Bash(wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python esp_figure.py:*)",
+      "Bash(wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python test_*)",
+      "Bash(wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python night/check.py:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)", "Bash(git merge:*)", "Bash(git rebase:*)", "Bash(git reset:*)",
+      "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git branch:*)", "Bash(git diff *--output*)",
+      "Bash(pip:*)", "Bash(apt:*)", "Bash(curl:*)", "WebFetch", "WebSearch",
+      "Edit(//c/dev/molcule visualizer/**)",
+      "Edit(night/*.ps1)", "Edit(night/code.md)", "Edit(night/review.md)", "Edit(night/settings.json)",
+      "Edit(night/reference.json)", "Edit(night/test_check.py)", "Edit(night/check.py)", "Edit(night/baseline/**)",
+      "Edit(CLAUDE.md)", "Edit(.claude/**)", "Edit(test_water.py)"
+    ]
+  }
+}
