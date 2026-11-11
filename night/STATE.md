@@ -12,3 +12,5 @@
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->
+- Stereo: syndiotactic (user, 2026-11-11). The PAM3 SMILES gets explicit alternating
+  stereocentres; the caption states "syndiotactic trimer".
