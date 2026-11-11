@@ -22,9 +22,15 @@
 
 ## Skipped (waiting on you)
 
+- Night 2026-11-12 queue: `pam3s_fold` and `pam3s_ext` both timed out (exit 124), no method.txt.
+  fold: rerank done (MMFF #1 = DFT lowest, D3+water), opt 31 steps, E -782.58250, gradients converged,
+  dE/displacement not yet. ext: 5 steps only (queue cap). Both `opt_traj.xyz` kept for restart.
+
 ## Next
-- Morning: review the queued `runs/pam3s_fold` / `runs/pam3s_ext` (D3 + water + rerank) against the gas
-  controls `pam3s_gas_fold` / `pam3s_gas_ext`; render with `--view` as needed; then tick "Redo" in IMPROVEMENTS.md.
+- Re-queue the same two Answers lines (ext first); the restart resumes from `opt_traj.xyz`.
+  4 h job cap is too short (~6.6 min/step); user to decide on a longer cap or one job per night.
+- Then review `runs/pam3s_fold` / `runs/pam3s_ext` against the gas controls `pam3s_gas_fold` /
+  `pam3s_gas_ext`; render with `--view` as needed; then tick "Redo" in IMPROVEMENTS.md.
 - Week 2: frequency check (`freq` sanity waits), HOMO/LUMO (`orbitals`), double sticks (`bond_list`), UKS (`spin`).
 
 ## Answers
