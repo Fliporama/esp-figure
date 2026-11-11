@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--orbitals] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
 
 Results live in runs/<name>/: mol.xyz, dens.cube, surf.vtk (with ESP), method.txt,
-and after render: ball.png, <style>_esp.png, caption.txt.
+and after render: ball.png, <style>_esp.png, caption.txt (+ homo/lumo .cube/.png with --orbitals).
 """
-import argparse, sys, time
+import argparse, re, sys, time
 from pathlib import Path
 import numpy as np
 
@@ -18,6 +18,9 @@ GRID = 100       # density grid points per axis
 # ponytail: fixed point count, so spacing grows with molecule size; raise GRID if big molecules look faceted
 MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near the O atoms
 LIMITS = {"rainbow": 0.06, "rwb": 0.03}
+H2EV = 27.211386 # Hartree -> eV
+ORB_ISO = 0.02   # orbital isovalue (a.u.) for the HOMO/LUMO pictures, a common GaussView-like choice
+ORB_COLORS = ("#2e8b57", "#8e44ad")   # +/- phase: green/purple, so no one reads them as ESP red/blue
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
@@ -138,7 +141,7 @@ def geometry(spec, charge, no_hbond=False):
             ("syndiotactic H-capped PAM trimer, " if spec == PAM3 else "") + f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
 
 
-def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False):
+def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, orbitals=False):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
@@ -149,8 +152,9 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             sys.exit(f"{out} holds a different molecule ({first}). Use another --name, or --force.")
         if f"level of theory: {level}," not in text:
             sys.exit(f"{out} was computed at a different level of theory (not {level}). Use another --name, or --force.")
-        print(f"{out} already computed (use --force to redo)")
-        return out
+        if not orbitals or (out / "homo.cube").exists():
+            print(f"{out} already computed (use --force to redo)")
+            return out
     out.mkdir(parents=True, exist_ok=True)
     import pyscf, rdkit
     from pyscf import gto, dft, df
@@ -194,6 +198,12 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         V += zc / np.linalg.norm(pts - R, axis=1)                                                      # nuclei
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
+    orb = ""
+    if orbitals:   # closed-shell RKS: HOMO = nelectron//2 - 1; same grid as the density cube
+        h = mol.nelectron // 2 - 1
+        for k, i in (("homo", h), ("lumo", h + 1)):
+            cubegen.orbital(mol, str(out / f"{k}.cube"), mf.mo_coeff[:, i], nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
+        orb = f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
 
     log.write_text(f"""input: {spec}
@@ -206,7 +216,7 @@ level of theory: {level}, density fitting (PySCF default auxiliary basis); ESP i
 SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
 surface: electron density isosurface rho = {ISO} a.u. (grid {GRID}^3, margin {MARGIN} bohr), {len(pts)} vertices
 ESP range on surface: {V.min():.4f} to {V.max():.4f} a.u.
-software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
+{orb}software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
 wall time: {time.time() - t0:.0f} s
 caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {level} level with PySCF {pyscf.__version__} ({geo}).
 """)
@@ -256,7 +266,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
 
     ev = np.linalg.svd(xyz - xyz.mean(0))[2]   # principal axes: long, middle, thin
 
-    def shoot(path, add_surface=None):
+    def shoot(path, add_surface=None, tilt=0.0):
         p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
         p.set_background("white")
         p.enable_depth_peeling(20)            # without it the transparent surface bands
@@ -265,7 +275,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         if add_surface:
             add_surface(p)
         if view is None:                      # look down the thinnest axis, long axis horizontal
-            p.view_vector(ev[2], viewup=ev[1])
+            p.view_vector(ev[2] + tilt * ev[1], viewup=ev[1])
         else:
             v = np.asarray(view, float)
             p.view_vector(v, viewup=ev[1] if abs(v @ ev[1]) < 0.9 * np.linalg.norm(v) else ev[0])
@@ -289,6 +299,23 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                                  title_font_size=28, label_font_size=24)))
         notes.append(f"{st}_esp.png: colour scale -{lim} to +{lim} a.u. ({st}; red = negative, blue = positive; "
                      f"values beyond the limits are shown at the end colours)")
+    for k in ("homo", "lumo"):
+        if not (out / f"{k}.cube").exists():
+            continue
+        g = read_cube(out / f"{k}.cube")
+        e = float(re.search(rf"{k.upper()}: (\S+) eV", (out / "method.txt").read_text(encoding="utf-8")).group(1))
+
+        def lobes(p, g=g, label=f"{k.upper()} ({e:.2f} eV)".replace("-", "\u2212")):
+            for v, c in zip((ORB_ISO, -ORB_ISO), ORB_COLORS):
+                lobe = g.contour([v], scalars="rho")
+                if lobe.n_points:
+                    p.add_mesh(lobe.smooth_taubin(n_iter=30).compute_normals(), color=c, opacity=0.7,
+                               smooth_shading=True, specular=0.3, culling="back")
+            p.add_text(label, position="upper_left", font_size=20, color="black")
+        shoot(out / f"{k}.png", lobes, tilt=0.6)   # ~30 deg tilt: pi lobes above/below a planar molecule both show
+        notes.append(f"{k}.png: {k.upper()} isosurfaces at +/-{ORB_ISO} a.u. (orbital value); colours show the phase "
+                     f"(green +, purple -), not ESP sign; "
+                     f"default view tilted ~30 deg from the ESP view")
     for e in ex:
         notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}, marked): "
                      f"{e['value']:+.4f} a.u., nearest atom {e['atom']}")
@@ -311,6 +338,7 @@ if __name__ == "__main__":
     c.add_argument("--force", action="store_true", help="recompute even if results exist")
     c.add_argument("--no-hbond", action="store_true", help="take the lowest-MMFF conformer with no intramolecular H-bond")
     c.add_argument("--d3", action="store_true", help="add D3(BJ) dispersion (pip install pyscf-dispersion); changes energies, not the ESP")
+    c.add_argument("--orbitals", action="store_true", help="also write HOMO/LUMO cubes + energies; render then draws homo/lumo.png")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -321,6 +349,6 @@ if __name__ == "__main__":
     r.add_argument("--hbonds", action="store_true", help="draw intramolecular H-bonds as dashed lines")
     a = ap.parse_args()
     if a.cmd == "calc":
-        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3)
+        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, orbitals=a.orbitals)
     else:
         render(a.name, a.style, a.limit, a.view, extrema=a.extrema, hbond_lines=a.hbonds)
