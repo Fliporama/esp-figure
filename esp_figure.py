@@ -21,6 +21,7 @@ LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 H2EV = 27.211386 # Hartree -> eV
 ORB_ISO = 0.02   # orbital isovalue (a.u.) for the HOMO/LUMO pictures, a common GaussView-like choice
 ORB_COLORS = ("#2e8b57", "#8e44ad")   # +/- phase: green/purple, so no one reads them as ESP red/blue
+ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not tint the atoms' element colours
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
@@ -309,7 +310,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
             for v, c in zip((ORB_ISO, -ORB_ISO), ORB_COLORS):
                 lobe = g.contour([v], scalars="rho")
                 if lobe.n_points:
-                    p.add_mesh(lobe.smooth_taubin(n_iter=30).compute_normals(), color=c, opacity=0.7,
+                    p.add_mesh(lobe.smooth_taubin(n_iter=30).compute_normals(), color=c, opacity=ORB_OPACITY,
                                smooth_shading=True, specular=0.3, culling="back")
             p.add_text(label, position="upper_left", font_size=20, color="black")
         shoot(out / f"{k}.png", lobes, tilt=0.6)   # ~30 deg tilt: pi lobes above/below a planar molecule both show
