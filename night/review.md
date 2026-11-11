@@ -26,4 +26,4 @@ The coding phase and the job queue have finished. Check, report, commit. Do not 
    that item's sanity entry has status `pass`. Unvalidated items stay unticked.
 7. Commit: `night: report`. Stop. The script pushes the branch.
 
-Same file restrictions as phase 1. If `night/check.py` crashes, report that as a failed check; never edit it. Be blunt about weaknesses; the user reads this first.
+Same file restrictions and command rules as phase 1 (one plain command per Bash call: no `cd`, `git -C`, `&&`, `;`, pipes). If `night/check.py` crashes, report that as a failed check; never edit it. Be blunt about weaknesses; the user reads this first.

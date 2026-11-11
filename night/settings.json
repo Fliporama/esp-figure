@@ -2,7 +2,7 @@
   "permissions": {
     "defaultMode": "default",
     "allow": [
-      "Read", "Edit(./**)", "Write(./**)", "Agent", "Glob", "Grep",
+      "Read", "Edit(./**)","Agent", "Glob", "Grep",
       "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)",
       "Bash(wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python esp_figure.py:*)",
       "Bash(wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python test_*)",

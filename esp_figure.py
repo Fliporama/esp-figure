@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z]
 
@@ -114,13 +114,17 @@ def geometry(spec, charge, no_hbond=False):
             ("syndiotactic H-capped PAM trimer, " if spec == PAM3 else "") + f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
 
 
-def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs"):
+def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False):
     out = Path(root) / name
     log = out / "method.txt"
+    level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
     if log.exists() and not force:
-        first = log.read_text().splitlines()[0]
+        text = log.read_text(encoding="utf-8")
+        first = text.splitlines()[0]
         if first != f"input: {spec}":
             sys.exit(f"{out} holds a different molecule ({first}). Use another --name, or --force.")
+        if f"level of theory: {level}," not in text:
+            sys.exit(f"{out} was computed at a different level of theory (not {level}). Use another --name, or --force.")
         print(f"{out} already computed (use --force to redo)")
         return out
     out.mkdir(parents=True, exist_ok=True)
@@ -136,6 +140,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     def scf(mol):
         mf = dft.RKS(mol).density_fit()
         mf.xc = "b3lyp"
+        if d3:
+            mf.disp = "d3bj"   # pip install pyscf-dispersion; post-SCF energy term, density and ESP unchanged
         mf.kernel()
         return mf
 
@@ -144,7 +150,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         from pyscf.geomopt.geometric_solver import optimize   # pip install geometric
         mol = optimize(mf)
         mf = scf(mol)
-        geo = f"{LEVEL} optimised geometry (geomeTRIC), started from {geo}"
+        geo = f"{level} optimised geometry (geomeTRIC), started from {geo}"
     if not mf.converged:
         print("WARNING: SCF did not converge; results are not trustworthy", file=sys.stderr)
     dm = mf.make_rdm1()
@@ -164,6 +170,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         V += zc / np.linalg.norm(pts - R, axis=1)                                                      # nuclei
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
+    disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
 
     log.write_text(f"""input: {spec}
 name: {name}
@@ -171,13 +178,13 @@ charge: {charge}
 atoms: {len(sym)}
 geometry: {geo}
 intramolecular H-bonds in final geometry (H···N/O < {HB_CUT} Å): {hbonds(rdm, xyz) if rdm else "n/a"}
-level of theory: {LEVEL}, density fitting (PySCF default auxiliary basis); ESP integrals exact
-SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged})
+level of theory: {level}, density fitting (PySCF default auxiliary basis); ESP integrals exact
+SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
 surface: electron density isosurface rho = {ISO} a.u. (grid {GRID}^3, margin {MARGIN} bohr), {len(pts)} vertices
 ESP range on surface: {V.min():.4f} to {V.max():.4f} a.u.
 software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
 wall time: {time.time() - t0:.0f} s
-caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {LEVEL} level with PySCF {pyscf.__version__} ({geo}).
+caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {level} level with PySCF {pyscf.__version__} ({geo}).
 """)
     print(log.read_text())
     return out
@@ -256,6 +263,7 @@ if __name__ == "__main__":
     c.add_argument("--opt", action="store_true", help="DFT geometry optimisation first (pip install geometric; 30-60 min)")
     c.add_argument("--force", action="store_true", help="recompute even if results exist")
     c.add_argument("--no-hbond", action="store_true", help="take the lowest-MMFF conformer with no intramolecular H-bond")
+    c.add_argument("--d3", action="store_true", help="add D3(BJ) dispersion (pip install pyscf-dispersion); changes energies, not the ESP")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -264,6 +272,6 @@ if __name__ == "__main__":
                    help="camera direction, e.g. --view=0,0,1 (default: along the thinnest molecular axis)")
     a = ap.parse_args()
     if a.cmd == "calc":
-        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond)
+        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3)
     else:
         render(a.name, a.style, a.limit, a.view)

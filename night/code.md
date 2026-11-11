@@ -36,6 +36,11 @@ Take the first unchecked roadmap item not already in STATE "Done".
      "unvalidated: needs a sanity check" in STATE.
 
 ## Rules
+- Commands: your shell already starts in the worktree. Run one command per Bash call, in exactly
+  the forms used in this file: `git add <files>`, `git commit -m "<msg>"`, `git status`, `git diff`,
+  `wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python <script>`.
+  No `cd`, no `git -C`, no `&&`, `;`, pipes or `$(...)`: anything else needs approval, and at
+  night nobody approves, so the commit or test silently doesn't happen.
 - You may not edit: `night/*.ps1`, `night/code.md`, `night/review.md`,
   `night/settings.json`, `night/reference.json`, `night/test_check.py`, `night/check.py`, `night/baseline/`, `night/sanity/`,
   `CLAUDE.md`, `test_water.py`. Never weaken a test to make it pass.

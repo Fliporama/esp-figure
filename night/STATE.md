@@ -1,13 +1,13 @@
 # Night state
 
 ## Done
-- Stereo, guards, full element colour table (day session 2026-11-11; sanity checks pass).
+- Stereo, guards, full element colour table, D3 `--d3` (day session 2026-11-11; sanity checks pass).
   `esp_figure.PAM3` is the syndiotactic SMILES; unspecified-stereo SMILES are now refused.
 
 ## Skipped (waiting on you)
 
 ## Next
-- Week 1 items of the roadmap in `IMPROVEMENTS.md`: D3, solvent, restart, re-ranking, then the redo.
+- Week 1 items of the roadmap in `IMPROVEMENTS.md`: solvent, restart, re-ranking, then the redo.
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->

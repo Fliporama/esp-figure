@@ -107,7 +107,7 @@ next session.
 **Week 1: PAM figures paper-ready**
 - [x] Stereo: require or set tacticity in SMILES (§1) (2026-11-11, day session)
 - [x] Guards with clear errors: radicals, unsupported elements, undefined stereo (2026-11-11, day session)
-- [ ] D3(BJ) dispersion (§2)
+- [x] D3(BJ) dispersion (§2) (2026-11-11, day session; `--d3`, off by default)
 - [ ] Implicit solvent `--solvent water` (§2)
 - [ ] Restart / checkpoint for `--opt` (§4)
 - [ ] DFT re-ranking of top MMFF conformers (§2)

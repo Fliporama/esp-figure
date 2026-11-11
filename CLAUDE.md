@@ -55,7 +55,7 @@ First target molecule: polyacrylamide (PAM) oligomer.
   stereo (`esp_figure.PAM3`; caption says syndiotactic), guards (unsupported
   element / odd electrons / unspecified stereo → clean exit before any
   compute; supported = MMFF94 ∩ 6-31G(d): H C N O F Si P S Cl Br), `COLORS`
-  table. **Unspecified-stereo SMILES (e.g. the old PAM3 one in examples
+  table, D3 (`--d3`, off by default; method.txt adds "dispersion energy"). **Unspecified-stereo SMILES (e.g. the old PAM3 one in examples
   below) are now refused.** Decisions for D3/solvent/re-ranking/redo jobs
   are in `night/STATE.md` Answers.
 
