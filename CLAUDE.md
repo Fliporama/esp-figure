@@ -51,6 +51,13 @@ First target molecule: polyacrylamide (PAM) oligomer.
   in 6 vs 7 steps; PAM3 PCM ESP extremes +15–20 %, fold−ext −5.5 → −2.4
   kcal/mol. Syndiotactic PAM3 (verified by `stereo.py`):
   `C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O`.
+- Built in the day session 2026-11-11 (sanity checks pass, regression unchanged):
+  stereo (`esp_figure.PAM3`; caption says syndiotactic), guards (unsupported
+  element / odd electrons / unspecified stereo → clean exit before any
+  compute; supported = MMFF94 ∩ 6-31G(d): H C N O F Si P S Cl Br), `COLORS`
+  table. **Unspecified-stereo SMILES (e.g. the old PAM3 one in examples
+  below) are now refused.** Decisions for D3/solvent/re-ranking/redo jobs
+  are in `night/STATE.md` Answers.
 
   | Item | Run | Pass if |
   |---|---|---|

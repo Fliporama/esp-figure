@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O" --name pam3 [--charge 0] [--opt] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--force]
+  (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z]
 
 Results live in runs/<name>/: mol.xyz, dens.cube, surf.vtk (with ESP), method.txt,
@@ -20,6 +21,17 @@ LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
+# H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
+# Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
+PAM3 = "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O"
+# Elements with both MMFF94 parameters and a 6-31G(d) basis in PySCF (no I: 6-31G(d) stops before it)
+ELEMENTS = {"H", "C", "N", "O", "F", "Si", "P", "S", "Cl", "Br"}
+# ponytail: one list for SMILES and .xyz input; .xyz needs no MMFF, widen it when other basis sets arrive
+# Jmol-style colours; unknown elements fall back to pink (#ff69b4) so they stand out
+COLORS = {"H": "#f2f2f2", "C": "#7f7f7f", "N": "#1f3fff", "O": "#ff1f1f", "S": "#e6c619", "Cl": "#1fd01f",
+          "F": "#90e050", "P": "#ff8000", "Si": "#f0c8a0", "Br": "#a62929", "I": "#940094", "B": "#ffb5b5",
+          "Li": "#cc80ff", "Na": "#ab5cf2", "K": "#8f40d4", "Mg": "#8aff00", "Ca": "#3dff00", "Al": "#bfa6a6",
+          "Fe": "#e06633", "Cu": "#c88033", "Zn": "#7d80b0"}
 
 
 def read_xyz(path):
@@ -51,18 +63,38 @@ def hbonds(m, xyz):
     return int(sum(topo[h, a] > 3 and np.linalg.norm(xyz[h] - xyz[a]) < HB_CUT for h in don for a in acc))
 
 
+def check_input(sym, charge):
+    """Refuse what the method can't do, before any compute: unsupported elements, open-shell (radical) molecules."""
+    from pyscf.data.elements import charge as Z
+    bad = sorted(set(sym) - ELEMENTS)
+    if bad:
+        sys.exit(f"unsupported element(s) {', '.join(bad)}: MMFF94 + 6-31G(d) cover only {', '.join(sorted(ELEMENTS))}")
+    if (sum(Z(s) for s in sym) - charge) % 2:
+        sys.exit("odd number of electrons (radical / open-shell): only closed-shell RKS is supported; "
+                 "check the charge, or add the missing H")
+
+
 def geometry(spec, charge, no_hbond=False):
     """SMILES or .xyz -> symbols, coords (Å), charge, description, RDKit mol (None for .xyz)."""
     if spec.endswith(".xyz"):
         if no_hbond:
             sys.exit("--no-hbond needs SMILES input (it picks among conformers)")
         sym, xyz = read_xyz(spec)
+        check_input(sym, charge)
         return sym, xyz, charge, f"geometry read from {Path(spec).name}", None
     from rdkit import Chem
     from rdkit.Chem import AllChem
     m = Chem.MolFromSmiles(spec)
     if m is None:
         sys.exit(f"bad SMILES: {spec}")
+    check_input([a.GetSymbol() for a in Chem.AddHs(m).GetAtoms()], Chem.GetFormalCharge(m))
+    # Undefined stereo would make each conformer a random stereoisomer, so "lowest energy" compares different molecules.
+    loose = [f"{'stereocentre at' if s.type.name.startswith('Atom') else 'double bond'} atom {s.centeredOn}"
+             for s in Chem.FindPotentialStereo(m)
+             if s.specified != Chem.StereoSpecified.Specified]
+    if loose:
+        sys.exit(f"unspecified stereo ({', '.join(loose)}): write @/@@ or /\\ into the SMILES, "
+                 f"e.g. syndiotactic PAM3 {PAM3}")
     m = Chem.AddHs(m)
     # Conformer search: embed many, keep the lowest MMFF energy, so the figure isn't one random shape.
     cids = list(AllChem.EmbedMultipleConfs(m, numConfs=CONFS, randomSeed=7))
@@ -79,7 +111,7 @@ def geometry(spec, charge, no_hbond=False):
     how = (f"lowest-energy of {ok.sum()}/{len(cids)} H-bond-free (no H···N/O < {HB_CUT} Å) conformers"
            if no_hbond else f"lowest-energy of {len(cids)} conformers")
     return (sym, m.GetConformer(cids[best]).GetPositions(), Chem.GetFormalCharge(m),
-            f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
+            ("syndiotactic H-capped PAM trimer, " if spec == PAM3 else "") + f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs"):
@@ -159,7 +191,7 @@ def render(name, style="both", limit=None, view=None, root="runs"):
     sym, xyz = read_xyz(out / "mol.xyz")
     surf = pv.read(out / "surf.vtk")
 
-    col = {"H": "#f2f2f2", "C": "#7f7f7f", "N": "#1f3fff", "O": "#ff1f1f", "S": "#e6c619", "Cl": "#1fd01f"}
+    col = COLORS
     rcov = [Chem.GetPeriodicTable().GetRcovalent(s) for s in sym]
 
     def molecule(p):

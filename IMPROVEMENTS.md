@@ -105,13 +105,13 @@ session, queue PAM3 validation runs overnight, review them at the start of the
 next session.
 
 **Week 1: PAM figures paper-ready**
-- [ ] Stereo: require or set tacticity in SMILES (§1)
-- [ ] Guards with clear errors: radicals, unsupported elements, undefined stereo
+- [x] Stereo: require or set tacticity in SMILES (§1) (2026-11-11, day session)
+- [x] Guards with clear errors: radicals, unsupported elements, undefined stereo (2026-11-11, day session)
 - [ ] D3(BJ) dispersion (§2)
 - [ ] Implicit solvent `--solvent water` (§2)
 - [ ] Restart / checkpoint for `--opt` (§4)
 - [ ] DFT re-ranking of top MMFF conformers (§2)
-- [ ] Full element colour table
+- [x] Full element colour table (2026-11-11, day session)
 - [ ] Redo the folded vs. extended comparison with all of the above
 
 **Week 2: credibility + presentation**
