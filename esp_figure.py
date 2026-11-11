@@ -77,6 +77,37 @@ def mol_from_xyz(sym, xyz):
     return m
 
 
+def bond_list(sym, xyz, charge=0):
+    """Covalent bonds as (i, j, order), order 1/2/3, from coordinates (RDKit DetermineBondOrders).
+    If no valid bond-order assignment exists (e.g. a charged run), every bond comes back as single."""
+    from rdkit.Chem import rdDetermineBonds
+    m = mol_from_xyz(sym, xyz)
+    try:
+        rdDetermineBonds.DetermineBondOrders(m, charge=charge)
+    except ValueError:
+        pass
+    return [(b.GetBeginAtomIdx(), b.GetEndAtomIdx(), max(1, int(b.GetBondTypeAsDouble()))) for b in m.GetBonds()]
+
+
+def stick_offsets(xyz, bonds, i, j, order, view):
+    """Sideways shifts (Å) of the sticks for one bond: one stick for single, two for double, three for triple.
+    Multiple sticks lie in the plane of a neighbouring atom (e.g. the amide plane for C=O),
+    or perpendicular to the view direction when there is no usable neighbour."""
+    if order == 1:
+        return [np.zeros(3)]
+    d = (xyz[j] - xyz[i]) / np.linalg.norm(xyz[j] - xyz[i])
+    nbr = [(a, b) for a, b, _ in bonds for a, b in ((a, b), (b, a)) if a in (i, j) and b not in (i, j)]
+    for a, b in nbr + [(None, None)]:
+        v = xyz[b] - xyz[a] if a is not None else np.cross(d, view)
+        v = v - (v @ d) * d
+        if np.linalg.norm(v) > 0.1:
+            break
+    else:
+        v = np.cross(d, [1.0, 0, 0]) if abs(d[0]) < 0.9 else np.cross(d, [0, 1.0, 0])
+    v /= np.linalg.norm(v)
+    return [k * 0.11 * v for k in ((-1, 1) if order == 2 else (-1.4, 0, 1.4))]
+
+
 def esp_extrema(surf, sym, xyz):
     """Most negative and most positive ESP on the surface, with the nearest atom (e.g. 'O12', 1-based)."""
     out = []
@@ -217,26 +248,26 @@ caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density iso
 def render(name, style="both", limit=None, view=None, root="runs", extrema=False, hbond_lines=False):
     import pyvista as pv
     from matplotlib.colors import LinearSegmentedColormap
-    from rdkit import Chem
     out = Path(root) / name
     sym, xyz = read_xyz(out / "mol.xyz")
     surf = pv.read(out / "surf.vtk")
 
     col = COLORS
-    rcov = [Chem.GetPeriodicTable().GetRcovalent(s) for s in sym]
+    bonds = bond_list(sym, xyz)
+    ev = np.linalg.svd(xyz - xyz.mean(0))[2]   # principal axes: long, middle, thin
 
     def molecule(p):
         for s, r in zip(sym, xyz):
             p.add_mesh(pv.Sphere(radius=0.17 if s == "H" else 0.30, center=r,theta_resolution=40, phi_resolution=40),
                        color=col.get(s, "#ff69b4"), smooth_shading=True, specular=0.8, specular_power=40)
-        for i in range(len(sym)):
-            for j in range(i + 1, len(sym)):
-                if np.linalg.norm(xyz[i] - xyz[j]) < 1.25 * (rcov[i] + rcov[j]):
-                    mid = (xyz[i] + xyz[j]) / 2   # two-tone bond, like GaussView
-                    for a, b, s in ((xyz[i], mid, sym[i]), (mid, xyz[j], sym[j])):
-                        p.add_mesh(pv.Cylinder(center=(a + b) / 2, direction=b - a, radius=0.08,
-                                               height=np.linalg.norm(b - a), resolution=30),
-                                   color=col.get(s, "#ff69b4"), smooth_shading=True, specular=0.6)
+        for i, j, order in bonds:
+            off = stick_offsets(xyz, bonds, i, j, order, ev[2])
+            mid = (xyz[i] + xyz[j]) / 2   # two-tone bond, like GaussView
+            for o in off:
+                for a, b, s in ((xyz[i], mid, sym[i]), (mid, xyz[j], sym[j])):
+                    p.add_mesh(pv.Cylinder(center=(a + b) / 2 + o, direction=b - a, radius=0.08 if order == 1 else 0.05,
+                                           height=np.linalg.norm(b - a), resolution=30),
+                               color=col.get(s, "#ff69b4"), smooth_shading=True, specular=0.6)
         for h, a in hb:                       # dashed H-bond: 0.12 Å dashes with 0.08 Å gaps
             d = xyz[a] - xyz[h]
             n = int(np.linalg.norm(d) / 0.2)
@@ -253,8 +284,6 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         if ex:
             p.add_point_labels(np.array([e["point"] for e in ex]), [f"{e['value']:+.3f}" for e in ex], font_size=22,
                                point_size=1, shape_opacity=0.7, always_visible=True, show_points=False)
-
-    ev = np.linalg.svd(xyz - xyz.mean(0))[2]   # principal axes: long, middle, thin
 
     def shoot(path, add_surface=None):
         p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
