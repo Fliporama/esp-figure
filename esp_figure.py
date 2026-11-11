@@ -3,7 +3,7 @@
 
   python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
-  python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z]
+  python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
 
 Results live in runs/<name>/: mol.xyz, dens.cube, surf.vtk (with ESP), method.txt,
 and after render: ball.png, <style>_esp.png, caption.txt.
@@ -54,13 +54,37 @@ def read_cube(path):
     return g
 
 
-def hbonds(m, xyz):
-    """Intramolecular H-bonds: H on N/O within HB_CUT of an N/O more than 3 bonds away (i.e. not its own amide O)."""
+def hbond_pairs(m, xyz):
+    """Intramolecular H-bonds as (H index, acceptor index): H on N/O within HB_CUT of an N/O more than
+    3 bonds away (i.e. not its own amide O)."""
     from rdkit import Chem
     topo = Chem.GetDistanceMatrix(m)
     don = [a.GetIdx() for a in m.GetAtoms() if a.GetSymbol() == "H" and a.GetNeighbors()[0].GetSymbol() in "NO"]
     acc = [a.GetIdx() for a in m.GetAtoms() if a.GetSymbol() in ("N", "O")]
-    return int(sum(topo[h, a] > 3 and np.linalg.norm(xyz[h] - xyz[a]) < HB_CUT for h in don for a in acc))
+    return [(h, a) for h in don for a in acc if topo[h, a] > 3 and np.linalg.norm(xyz[h] - xyz[a]) < HB_CUT]
+
+
+def hbonds(m, xyz):
+    return len(hbond_pairs(m, xyz))
+
+
+def mol_from_xyz(sym, xyz):
+    """Bond graph from coordinates (for H-bond topology when only mol.xyz is available)."""
+    from rdkit import Chem
+    from rdkit.Chem import rdDetermineBonds
+    m = Chem.MolFromXYZBlock(f"{len(sym)}\n\n" + "".join(f"{s} {x} {y} {z}\n" for s, (x, y, z) in zip(sym, xyz)))
+    rdDetermineBonds.DetermineConnectivity(m)
+    return m
+
+
+def esp_extrema(surf, sym, xyz):
+    """Most negative and most positive ESP on the surface, with the nearest atom (e.g. 'O12', 1-based)."""
+    out = []
+    for kind, i in (("min", int(surf["esp"].argmin())), ("max", int(surf["esp"].argmax()))):
+        p = surf.points[i]
+        k = int(np.linalg.norm(xyz - p, axis=1).argmin())
+        out.append({"kind": kind, "value": float(surf["esp"][i]), "point": p, "atom": f"{sym[k]}{k + 1}"})
+    return out
 
 
 def check_input(sym, charge):
@@ -190,7 +214,7 @@ caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density iso
     return out
 
 
-def render(name, style="both", limit=None, view=None, root="runs"):
+def render(name, style="both", limit=None, view=None, root="runs", extrema=False, hbond_lines=False):
     import pyvista as pv
     from matplotlib.colors import LinearSegmentedColormap
     from rdkit import Chem
@@ -213,6 +237,22 @@ def render(name, style="both", limit=None, view=None, root="runs"):
                         p.add_mesh(pv.Cylinder(center=(a + b) / 2, direction=b - a, radius=0.08,
                                                height=np.linalg.norm(b - a), resolution=30),
                                    color=col.get(s, "#ff69b4"), smooth_shading=True, specular=0.6)
+        for h, a in hb:                       # dashed H-bond: 0.12 Å dashes with 0.08 Å gaps
+            d = xyz[a] - xyz[h]
+            n = int(np.linalg.norm(d) / 0.2)
+            for t in range(n):
+                c = xyz[h] + d * (t + 0.3) / n
+                p.add_mesh(pv.Cylinder(center=c, direction=d, radius=0.035, height=0.12, resolution=16), color="#555555")
+
+    hb = hbond_pairs(mol_from_xyz(sym, xyz), xyz) if hbond_lines else []
+    ex = esp_extrema(surf, sym, xyz) if extrema else []
+
+    def markers(p):
+        for e in ex:
+            p.add_mesh(pv.Sphere(radius=0.15, center=e["point"]), color="#222222")
+        if ex:
+            p.add_point_labels(np.array([e["point"] for e in ex]), [f"{e['value']:+.3f}" for e in ex], font_size=22,
+                               point_size=1, shape_opacity=0.7, always_visible=True, show_points=False)
 
     ev = np.linalg.svd(xyz - xyz.mean(0))[2]   # principal axes: long, middle, thin
 
@@ -241,7 +281,7 @@ def render(name, style="both", limit=None, view=None, root="runs"):
     notes = []
     for st in (["rainbow", "rwb"] if style == "both" else [style]):
         lim = limit if limit is not None else LIMITS[st]
-        shoot(out / f"{st}_esp.png", lambda p: p.add_mesh(
+        shoot(out / f"{st}_esp.png", lambda p: markers(p) or p.add_mesh(
             surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.3,
             culling="back",   # hide the far side: seen through the near side at grazing angles it shows as jagged stripes
             scalar_bar_args=dict(title="ESP (a.u.)\n", fmt="%.3f", n_labels=5, color="black", vertical=True,
@@ -249,6 +289,12 @@ def render(name, style="both", limit=None, view=None, root="runs"):
                                  title_font_size=28, label_font_size=24)))
         notes.append(f"{st}_esp.png: colour scale -{lim} to +{lim} a.u. ({st}; red = negative, blue = positive; "
                      f"values beyond the limits are shown at the end colours)")
+    for e in ex:
+        notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}, marked): "
+                     f"{e['value']:+.4f} a.u., nearest atom {e['atom']}")
+    if hbond_lines:
+        notes.append("H-bonds drawn: " + (", ".join(f"{sym[h]}{h + 1}···{sym[a]}{a + 1} {np.linalg.norm(xyz[h] - xyz[a]):.2f} Å"
+                                                for h, a in hb) or "none") + f" (H on N/O, acceptor > 3 bonds away, < {HB_CUT} Å)")
     (out / "caption.txt").write_text((out / "method.txt").read_text() + "\n".join(notes) +
                                      f"\nrendering: PyVista {pv.__version__}, VTK {'.'.join(map(str, pv.vtk_version_info))}\n")
     print(f"wrote PNGs to {out}")
@@ -271,8 +317,10 @@ if __name__ == "__main__":
     r.add_argument("--limit", type=float, help="colour limit in a.u. (default 0.06 rainbow, 0.03 rwb)")
     r.add_argument("--view", type=lambda s: [float(x) for x in s.split(",")],
                    help="camera direction, e.g. --view=0,0,1 (default: along the thinnest molecular axis)")
+    r.add_argument("--extrema", action="store_true", help="mark the most negative/positive ESP point (V_s,min/max) with values")
+    r.add_argument("--hbonds", action="store_true", help="draw intramolecular H-bonds as dashed lines")
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3)
     else:
-        render(a.name, a.style, a.limit, a.view)
+        render(a.name, a.style, a.limit, a.view, extrema=a.extrema, hbond_lines=a.hbonds)
