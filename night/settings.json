@@ -10,7 +10,7 @@
     ],
     "deny": [
       "Bash(git push:*)", "Bash(git merge:*)", "Bash(git rebase:*)", "Bash(git reset:*)",
-      "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git branch:*)", "Bash(git diff --output:*)",
+      "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git branch:*)", "Bash(git diff *--output*)",
       "Bash(pip:*)", "Bash(apt:*)", "Bash(curl:*)", "WebFetch", "WebSearch",
       "Edit(//c/dev/molcule visualizer/**)",
       "Edit(night/*.ps1)", "Edit(night/code.md)", "Edit(night/review.md)", "Edit(night/settings.json)",
