@@ -29,7 +29,7 @@ Take the first unchecked roadmap item not already in STATE "Done".
   5. Commit: `night: <item>`.
   6. Append its heavy validation jobs to `night/queue.txt`, one per line, as
      `esp_figure.py` arguments, e.g.
-     `calc CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O --name pam3_d3 --opt --d3`.
+     `calc C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O --name pam3s_d3 --opt --d3`.
      Every line needs a unique `--name`. Never run long jobs yourself; the
      queue runs after you finish.
   7. If `night/reference.json` has no `sanity` entry for this feature, note

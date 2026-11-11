@@ -168,7 +168,7 @@ exact end groups.
 One command, two stages, so appearance tweaks don't redo the chemistry:
 
 ```bash
-python esp_figure.py calc   "CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O" --name pam3 [--charge 0] [--opt]
+python esp_figure.py calc   "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt]
 python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view x,y,z]
 ```
 
