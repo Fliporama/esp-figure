@@ -3,11 +3,35 @@
 ## Done
 - Stereo, guards, full element colour table, D3 `--d3` (day session 2026-11-11; sanity checks pass).
   `esp_figure.PAM3` is the syndiotactic SMILES; unspecified-stereo SMILES are now refused.
+- Night 2026-11-12: solvent `--solvent water` (IEF-PCM eps 78.3553, SCF + opt + ESP; `test_solvent.py`),
+  restart for `--opt` (`opt_traj.xyz`, resumes from last complete frame; `test_restart.py`),
+  DFT re-ranking `--rerank N` (same D3/solvent flags as the run; `test_rerank.py`). All defaults unchanged.
+  Full `check.py --sanity` run once: d3, solvent, restart, rerank all PASS (solvent: water dG_solv -6.46
+  kcal/mol; PAM3 ESP extremes +17..23 %; fold-ext gas -5.51 -> water -2.41 kcal/mol. rerank on PAM3 gas:
+  MMFF #1 was also the DFT lowest, others +1.8..+5.1 kcal/mol). So the redo jobs pam3s_fold / pam3s_ext
+  are queued exactly as in Answers.
+- Notes for the day session:
+  - Mapped ESP with `--solvent` = nuclei + solvated density; PCM surface charges are NOT added (standard,
+    stated in method.txt).
+  - Re-ranking dedupe merges mirror-image conformers (RMSD allows reflection + heavy-atom automorphisms):
+    syndiotactic PAM3 is meso-like (identical ends), so a conformer and its mirror are the same shape.
+    The locked rerank sanity (energies distinct > 1e-7 Eh) can't catch mirror duplicates (~1e-5 Eh DFT
+    grid noise); `test_rerank.py` checks the PAM3 picks differ in MMFF energy. Consider tightening the
+    sanity to > 1e-4 Eh.
+  - Restart resumes geomeTRIC cold (no Hessian carried over), so it saves roughly the steps already done, not more.
 
 ## Skipped (waiting on you)
 
+- Night 2026-11-12 queue: `pam3s_fold` and `pam3s_ext` both timed out (exit 124), no method.txt.
+  fold: rerank done (MMFF #1 = DFT lowest, D3+water), opt 31 steps, E -782.58250, gradients converged,
+  dE/displacement not yet. ext: 5 steps only (queue cap). Both `opt_traj.xyz` kept for restart.
+
 ## Next
-- Week 1 items of the roadmap in `IMPROVEMENTS.md`: solvent, restart, re-ranking, then the redo.
+- Re-queue the same two Answers lines (ext first); the restart resumes from `opt_traj.xyz`.
+  4 h job cap is too short (~6.6 min/step); user to decide on a longer cap or one job per night.
+- Then review `runs/pam3s_fold` / `runs/pam3s_ext` against the gas controls `pam3s_gas_fold` /
+  `pam3s_gas_ext`; render with `--view` as needed; then tick "Redo" in IMPROVEMENTS.md.
+- Week 2: frequency check (`freq` sanity waits), HOMO/LUMO (`orbitals`), double sticks (`bond_list`), UKS (`spin`).
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->

@@ -1,0 +1,20 @@
+I've built solvent, restart and re-ranking, and committed each. The full sanity suite is now running in the background (about 1 h). That result decides whether I queue the two folded/extended redo jobs. Then I'll update `night/STATE.md` and commit.
+
+I built the three remaining Week-1 code items: implicit solvent, restart for `--opt`, and DFT re-ranking. All defaults are unchanged and each item has its own commit. I ran the full sanity suite once, and the D3, solvent, restart and re-rank checks all pass, so I queued the two redo jobs exactly as written in your Answers. They will run after this phase (~1.5–3 h each).
+
+**1. Implicit solvent, `--solvent water`.** IEF-PCM with ε 78.3553, applied to the SCF, the optimisation and the ESP.
+- Water's solvation energy is −6.46 kcal/mol, matching your −6.5 estimate.
+- On the two PAM3 geometries the ESP extremes grow by 17–23 %.
+- The folded-minus-extended energy moves from −5.51 kcal/mol in gas to −2.41 in water. Water weakens the preference for the folded shape, as expected.
+- The mapped ESP is nuclei plus the solvated electron density. The solvent's surface charges are not added; that is the usual choice, and method.txt says so.
+
+**2. Restart for `--opt`.** Each optimisation step is saved to `opt_traj.xyz`, and a rerun after a crash continues from the last complete step. Formamide stopped after 3 steps and resumed gives the same energy (4e-8 Eh apart) in 6 steps instead of 7. The saving is small because the optimiser restarts without its curvature memory, so a restart saves roughly the steps already done, no more.
+
+**3. DFT re-ranking, `--rerank N`.** A B3LYP single point on each of the N lowest distinct MMFF conformers, using the same D3/solvent settings as the run, then the run continues with the lowest.
+- A first version counted mirror-image conformers as distinct. They are the same shape, so they wasted single points. Syndiotactic PAM3 has the same problem: its two ends are identical, so a conformer and its mirror match after swapping the ends.
+- I fixed the duplicate filter to allow for both, and `test_rerank.py` checks that PAM3's 5 picks contain no mirror pairs.
+- In the gas-phase PAM3 sanity run, the MMFF favourite was also the DFT lowest; the other four were 1.8–5.1 kcal/mol higher.
+
+Decision for you: the locked re-rank sanity check counts energies as different if they differ by more than 1e-7 Eh. Mirror duplicates differ by about 1e-5 Eh of numerical noise, so that check can't catch them. I recommend tightening it to 1e-4 Eh; it's in `night/STATE.md`.
+
+Nothing was skipped. Each item got a review subagent and I fixed what it found. `night/STATE.md` (Done/Next) and the roadmap ticks in `IMPROVEMENTS.md` are updated and committed.

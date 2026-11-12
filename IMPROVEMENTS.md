@@ -108,9 +108,9 @@ next session.
 - [x] Stereo: require or set tacticity in SMILES (§1) (2026-11-11, day session)
 - [x] Guards with clear errors: radicals, unsupported elements, undefined stereo (2026-11-11, day session)
 - [x] D3(BJ) dispersion (§2) (2026-11-11, day session; `--d3`, off by default)
-- [ ] Implicit solvent `--solvent water` (§2)
-- [ ] Restart / checkpoint for `--opt` (§4)
-- [ ] DFT re-ranking of top MMFF conformers (§2)
+- [x] Implicit solvent `--solvent water` (§2) (2026-11-12, night; IEF-PCM)
+- [x] Restart / checkpoint for `--opt` (§4) (2026-11-12, night; `opt_traj.xyz`)
+- [x] DFT re-ranking of top MMFF conformers (§2) (2026-11-12, night; `--rerank N`)
 - [x] Full element colour table (2026-11-11, day session)
 - [ ] Redo the folded vs. extended comparison with all of the above
 

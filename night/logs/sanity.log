@@ -1,0 +1,49 @@
+PASS stereo (Stereo: require or set tacticity in SMILES)
+  PASS same molecule as PAM3: C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O
+  PASS 3 stereocentres, all specified: 3 centres, specified: ['Specified', 'Specified', 'Specified']
+  PASS all conformers are the input isomer: 50/50 match
+  PASS syndiotactic (amide sides alternate along the zigzag): sides [1, -1, 1]
+PASS guards (Guards with clear errors)
+  PASS guard [CH3]: exit 1; 'odd number of electrons (radical / open-shell): only closed-shell RKS is supported; check the charge, or add the missing H'
+  PASS guard [Pd]: exit 1; 'unsupported element(s) Pd: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si'
+  PASS guard CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O: exit 1; 'unspecified stereo (stereocentre at atom 1, stereocentre at atom 6, stereocentre at atom 11): write @/@@ or /\\ into the SMILES, e.g. syndiotactic PAM3 C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O'
+PASS d3 (D3(BJ) dispersion)
+  PASS fold: E_disp < 0, 5-60 kcal/mol: -41.64 kcal/mol
+  PASS fold: SCF part unchanged: E - E_disp = -782.48653680, baseline -782.48653680
+  PASS fold: ESP unchanged: -0.0663/0.0780, baseline -0.0663/0.078
+  PASS ext: E_disp < 0, 5-60 kcal/mol: -41.07 kcal/mol
+  PASS ext: SCF part unchanged: E - E_disp = -782.47776308, baseline -782.47776309
+  PASS ext: ESP unchanged: -0.0696/0.0748, baseline -0.0696/0.0748
+  PASS D3 favours folded: fold - ext = -0.57 kcal/mol
+PASS solvent (Implicit solvent --solvent water)
+  PASS water dG_solv -3 to -12 kcal/mol: -6.46 kcal/mol
+  PASS fold: ESP extremes grow < 50 %: min -0.0663 -> -0.0774 (+17%), max 0.078 -> 0.0934 (+20%)
+  PASS ext: ESP extremes grow < 50 %: min -0.0696 -> -0.0830 (+19%), max 0.0748 -> 0.0923 (+23%)
+  PASS E(fold) - E(ext) rises in water: gas -5.51 -> water -2.41 kcal/mol
+PASS restart (Restart / checkpoint for --opt)
+  PASS killed mid-optimisation after 3 steps: 3 frames, killed=True
+  PASS same final energy: -169.88541843 vs -169.88541847
+  PASS fewer steps when resumed: 6 vs 7
+PASS rerank (DFT re-ranking of top MMFF conformers)
+  PASS 5 distinct DFT energies in method.txt: [-782.4792142, -782.47573824, -782.47637189, -782.47115459, -782.4733707]
+  PASS chosen = lowest: final -782.47921420, lowest -782.4792142
+PASS colours (Full element colour table)
+  PASS P/Si/Br/I coloured, not pink: {'P': '#ff8000', 'Si': '#f0c8a0', 'Br': '#a62929', 'I': '#940094'}
+  PASS H/C/N/O/S/Cl unchanged: {'H': '#f2f2f2', 'C': '#7f7f7f', 'N': '#1f3fff', 'O': '#ff1f1f', 'S': '#e6c619', 'Cl': '#1fd01f'}
+  PASS render uses COLORS: 172191 green px, 0 pink px
+SKIP freq (Frequency check, confirm minimum)
+  SKIP: calc() has no 'freq' argument yet
+SKIP orbitals (HOMO/LUMO surfaces)
+  SKIP: calc() has no 'orbitals' argument yet
+PASS extrema (ESP min/max markers on the map)
+  PASS V_s,min / V_s,max equal the ESP range: -0.0678/0.0756 vs -0.0678/0.0756
+  PASS min nearest the carbonyl O: atom 2 O
+  PASS max nearest an N-H hydrogen: atom 3, N-H atoms [3, 4]
+  PASS marked map rendered, caption names V_s,min and V_s,max: 
+SKIP bonds (H-bonds as dashed lines, double bonds as double sticks)
+  PASS fold: 2 H-bonds: [(25, 15), (34, 4)]
+  PASS ext: 1 H-bonds: [(34, 9)]
+  PASS render with H-bond lines runs: 
+  SKIP: H-bond half passes; bond_list (double sticks) not built yet
+SKIP uks (Open-shell UKS)
+  SKIP: calc() has no 'spin' argument yet

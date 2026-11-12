@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--rerank 5] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
 
@@ -21,6 +21,7 @@ LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
+SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
 # H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
 # Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
 PAM3 = "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O"
@@ -38,6 +39,10 @@ def read_xyz(path):
     lines = Path(path).read_text().splitlines()
     rows = [l.split() for l in lines[2:2 + int(lines[0])]]
     return [r[0] for r in rows], np.array([r[1:4] for r in rows], float)
+
+
+def xyz_text(sym, xyz, comment):
+    return f"{len(sym)}\n{comment}\n" + "".join(f"{s} {x:.6f} {y:.6f} {z:.6f}\n" for s, (x, y, z) in zip(sym, xyz))
 
 
 def read_cube(path):
@@ -98,11 +103,12 @@ def check_input(sym, charge):
                  "check the charge, or add the missing H")
 
 
-def geometry(spec, charge, no_hbond=False):
-    """SMILES or .xyz -> symbols, coords (Å), charge, description, RDKit mol (None for .xyz)."""
+def geometry(spec, charge, no_hbond=False, top=1):
+    """SMILES or .xyz -> symbols, coords (Å), charge, description, RDKit mol (None for .xyz).
+    top > 1: coords is a list of the `top` lowest distinct MMFF conformers instead (for DFT re-ranking)."""
     if spec.endswith(".xyz"):
-        if no_hbond:
-            sys.exit("--no-hbond needs SMILES input (it picks among conformers)")
+        if no_hbond or top > 1:
+            sys.exit("--no-hbond and --rerank need SMILES input (they pick among conformers)")
         sym, xyz = read_xyz(spec)
         check_input(sym, charge)
         return sym, xyz, charge, f"geometry read from {Path(spec).name}", None
@@ -134,14 +140,40 @@ def geometry(spec, charge, no_hbond=False):
     sym = [a.GetSymbol() for a in m.GetAtoms()]
     how = (f"lowest-energy of {ok.sum()}/{len(cids)} H-bond-free (no H···N/O < {HB_CUT} Å) conformers"
            if no_hbond else f"lowest-energy of {len(cids)} conformers")
-    return (sym, m.GetConformer(cids[best]).GetPositions(), Chem.GetFormalCharge(m),
+    xyz = m.GetConformer(cids[best]).GetPositions()
+    if top > 1:   # the `top` lowest *distinct* minima (MMFF lands many embeddings in the same one), lowest first
+        heavy = [a.GetIdx() for a in m.GetAtoms() if a.GetAtomicNum() > 1]
+        P = [m.GetConformer(c).GetPositions()[heavy] for c in cids]
+        P = [p - p.mean(0) for p in P]
+        # Best-fit RMSD over rotations AND reflections (no det fix in Kabsch) AND heavy-atom graph automorphisms:
+        # mirror-image conformers are the same shape when the molecule is achiral, incl. meso-like syndiotactic PAM3,
+        # whose mirror image maps onto itself only after swapping the two chain ends.
+        hm = Chem.RemoveHs(m)                  # keeps heavy-atom order, so its indices match P
+        perms = [list(p) for p in hm.GetSubstructMatches(hm, uniquify=False, useChirality=False, maxMatches=1000)]
+        fit = lambda a, b: np.sqrt(max(0.0, ((a ** 2).sum() + (b ** 2).sum() - 2 * np.linalg.svd(a.T @ b)[1].sum()) / len(a)))
+        rmsd = lambda a, b: min(fit(a[p], b) for p in perms)
+        picks = []
+        for i in np.argsort(np.where(ok, energies, np.inf))[:ok.sum()]:
+            if all(abs(energies[i] - energies[j]) > 0.1 or rmsd(P[i], P[j]) > 0.1 for j in picks):
+                picks.append(i)
+            if len(picks) == top:
+                break
+        xyz = [m.GetConformer(cids[i]).GetPositions() for i in picks]
+        how = (f"of the {len(picks)} lowest distinct MMFF minima (heavy-atom RMSD or energy apart by > 0.1 Å / "
+               f"0.1 kcal/mol) among {ok.sum()}/{len(cids)}{' H-bond-free' if no_hbond else ''} conformers")
+    return (sym, xyz, Chem.GetFormalCharge(m),
             ("syndiotactic H-capped PAM trimer, " if spec == PAM3 else "") + f"{how}, RDKit ETKDG + MMFF94 (draft)", m)
 
 
-def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False):
+def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
+    rerank = rerank if rerank > 1 else 0       # 0 and 1 both mean: take the lowest-MMFF conformer
+    if solvent:
+        if solvent not in SOLVENTS:
+            sys.exit(f"unknown solvent {solvent}; supported: {', '.join(SOLVENTS)}")
+        level += f" + IEF-PCM({solvent}, eps {SOLVENTS[solvent]})"
     if log.exists() and not force:
         text = log.read_text(encoding="utf-8")
         first = text.splitlines()[0]
@@ -149,6 +181,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             sys.exit(f"{out} holds a different molecule ({first}). Use another --name, or --force.")
         if f"level of theory: {level}," not in text:
             sys.exit(f"{out} was computed at a different level of theory (not {level}). Use another --name, or --force.")
+        if (f"--rerank {rerank})" not in text) if rerank else ("DFT re-ranking energies" in text):
+            sys.exit(f"{out} was computed with a different --rerank setting. Use another --name, or --force.")
         print(f"{out} already computed (use --force to redo)")
         return out
     out.mkdir(parents=True, exist_ok=True)
@@ -157,30 +191,74 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     from pyscf.tools import cubegen
 
     t0 = time.time()
-    sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond)
-    mol = gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, xyz)],
-                charge=charge, basis="6-31g*", verbose=0)
+    sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank)
+    # Restart: --opt appends every step to opt_traj.xyz; a rerun after a crash (no method.txt) resumes from the last frame.
+    traj, tag, done = out / "opt_traj.xyz", f"{spec} | {level} | charge {charge} | no-hbond {no_hbond} | rerank {rerank}", 0
+    if force:
+        traj.unlink(missing_ok=True)
+    rr = out / "rerank.txt"   # kept on disk so a restarted --opt still reports the re-ranking it started from
+    if opt and traj.exists():
+        if rerank and not rr.exists():
+            sys.exit(f"{traj} exists but {rr.name} is missing. Delete the trajectory, or use --force.")
+        L = traj.read_text(encoding="utf-8").splitlines()
+        done = len(L) // (len(sym) + 2)                  # complete frames; a frame cut off by a kill is dropped
+        last = L[(done - 1) * (len(sym) + 2):done * (len(sym) + 2)]
+        if not done or last[0] != str(len(sym)) or not last[1].startswith(tag + " |") or [r.split()[0] for r in last[2:]] != sym:
+            sys.exit(f"{traj} is from a different molecule, charge, conformer choice or level of theory. "
+                     "Delete it, or use --force.")
+        traj.write_text("\n".join(L[:done * (len(sym) + 2)]) + "\n", encoding="utf-8")
+        xyz = np.array([r.split()[1:4] for r in last[2:]], float)
+        geo = f"{geo}; restarted from step {done} of an interrupted optimisation"
+    build = lambda x: gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, x)], charge=charge, basis="6-31g*", verbose=0)
 
     def scf(mol):
         mf = dft.RKS(mol).density_fit()
         mf.xc = "b3lyp"
         if d3:
             mf.disp = "d3bj"   # pip install pyscf-dispersion; post-SCF energy term, density and ESP unchanged
+        if solvent:            # IEF-PCM: polarises the density, so it changes energy, geometry (with --opt) and ESP
+            mf = mf.PCM()
+            mf.with_solvent.method = "IEF-PCM"
+            mf.with_solvent.eps = SOLVENTS[solvent]
         mf.kernel()
         return mf
 
-    mf = scf(mol)
+    if rerank and not done:
+        # DFT re-ranking at the run's own level (D3/solvent included), since MMFF and DFT can order conformers differently.
+        es, bad, mf = [], [], None
+        for k, x in enumerate(xyz, 1):
+            f = scf(build(x))
+            es.append(f.e_tot)
+            if not f.converged:
+                bad.append(f"#{k}")       # never picked
+            elif mf is None or f.e_tot < mf.e_tot:
+                mf, pick = f, k           # keep only the best SCF (each holds a large density-fitting tensor)
+        if mf is None:
+            sys.exit("--rerank: no candidate SCF converged")
+        rr.write_text(f"DFT re-ranking energies: {', '.join(f'{e:.8f}' for e in es)} Eh (MMFF order; picked #{pick}"
+                      f"{'; unconverged, not picked: ' + ' '.join(bad) if bad else ''}; --rerank {rerank})\n", encoding="utf-8")
+        mol = mf.mol
+    else:
+        mol = build(xyz)
+        mf = scf(mol)
+    if rerank:
+        geo = f"lowest {level} single-point energy {geo}"
     if opt:
         from pyscf.geomopt.geometric_solver import optimize   # pip install geometric
-        mol = optimize(mf)
+        steps = []
+
+        def frame(env):                        # called by geomeTRIC once per step
+            steps.append(env["energy"])
+            with traj.open("a", encoding="utf-8") as f:
+                f.write(xyz_text(sym, env["mol"].atom_coords() * B2A, f"{tag} | step {done + len(steps)} E {env['energy']:.10f}"))
+        mol = optimize(mf, callback=frame)
         mf = scf(mol)
         geo = f"{level} optimised geometry (geomeTRIC), started from {geo}"
     if not mf.converged:
         print("WARNING: SCF did not converge; results are not trustworthy", file=sys.stderr)
     dm = mf.make_rdm1()
     xyz = mol.atom_coords() * B2A
-    (out / "mol.xyz").write_text(f"{len(sym)}\n{name}\n" + "".join(
-        f"{s} {x:.6f} {y:.6f} {z:.6f}\n" for s, (x, y, z) in zip(sym, xyz)))
+    (out / "mol.xyz").write_text(xyz_text(sym, xyz, name))
 
     # Surface: isosurface of the density. ESP only at its vertices (full-grid ESP is >10x slower).
     cubegen.density(mol, str(out / "dens.cube"), dm, nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
@@ -195,16 +273,23 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
+    if solvent:
+        ws = mf.with_solvent
+        disp += (f"\nsolvent: implicit {solvent}, IEF-PCM eps {ws.eps} (PySCF; default vdW radii x {ws.vdw_scale}, "
+                 f"Lebedev order {ws.lebedev_order}), in the SCF"
+                 f"{' and the optimisation' if opt else ' only (geometry not optimised in solvent)'}; "
+                 "SCF energy is the total energy in solvent; mapped ESP is "
+                 "nuclei + solvated electron density (PCM surface charges not included)")
 
     log.write_text(f"""input: {spec}
 name: {name}
 charge: {charge}
 atoms: {len(sym)}
-geometry: {geo}
+geometry: {geo}{f"{chr(10)}optimisation steps: {len(steps)} (this run; trajectory in opt_traj.xyz)" if opt else ""}
 intramolecular H-bonds in final geometry (H···N/O < {HB_CUT} Å): {hbonds(rdm, xyz) if rdm else "n/a"}
 level of theory: {level}, density fitting (PySCF default auxiliary basis); ESP integrals exact
 SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
-surface: electron density isosurface rho = {ISO} a.u. (grid {GRID}^3, margin {MARGIN} bohr), {len(pts)} vertices
+{rr.read_text(encoding="utf-8") if rerank else ""}surface: electron density isosurface rho = {ISO} a.u. (grid {GRID}^3, margin {MARGIN} bohr), {len(pts)} vertices
 ESP range on surface: {V.min():.4f} to {V.max():.4f} a.u.
 software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
 wall time: {time.time() - t0:.0f} s
@@ -311,6 +396,9 @@ if __name__ == "__main__":
     c.add_argument("--force", action="store_true", help="recompute even if results exist")
     c.add_argument("--no-hbond", action="store_true", help="take the lowest-MMFF conformer with no intramolecular H-bond")
     c.add_argument("--d3", action="store_true", help="add D3(BJ) dispersion (pip install pyscf-dispersion); changes energies, not the ESP")
+    c.add_argument("--solvent", choices=sorted(SOLVENTS), help="implicit solvent (IEF-PCM) for SCF, --opt and ESP (slower)")
+    c.add_argument("--rerank", type=int, default=0, metavar="N",
+                   help="DFT single points on the N lowest distinct MMFF conformers, continue with the lowest (PAM3: ~2 min each in gas phase)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -321,6 +409,6 @@ if __name__ == "__main__":
     r.add_argument("--hbonds", action="store_true", help="draw intramolecular H-bonds as dashed lines")
     a = ap.parse_args()
     if a.cmd == "calc":
-        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3)
+        calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank)
     else:
         render(a.name, a.style, a.limit, a.view, extrema=a.extrema, hbond_lines=a.hbonds)
