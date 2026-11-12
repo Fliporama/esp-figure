@@ -116,11 +116,11 @@ next session.
   3.15 kcal/mol in water + D3, vs. 6.3 in gas; ext opt stopped at step 58, see CLAUDE.md)
 
 **Week 2: credibility + presentation**
-- [ ] Frequency check, confirm minimum (§4); 1–3 h per molecule, run overnight
+- [x] Frequency check, confirm minimum (§4): `calc --freq` (2026-11-13, night; PAM3 runs not queued yet)
 - [x] HOMO/LUMO surfaces (§4): `calc --orbitals`, render writes homo.png/lumo.png (2026-11-12)
 - [x] ESP min/max markers on the map (§4): `render --extrema` (2026-11-11)
 - [x] H-bonds as dashed lines (`render --hbonds`, 2026-11-11), double bonds as double sticks (`bond_list`, 2026-11-12) (§4)
-- [ ] Open-shell UKS (§4)
+- [x] Open-shell UKS (§4): `calc --spin N`, .xyz input only (2026-11-13, night)
 
 **Week 3: analyses**
 - [ ] MK/CHelpG charges (§4)
