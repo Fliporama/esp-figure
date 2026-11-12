@@ -116,7 +116,7 @@ next session.
 
 **Week 2: credibility + presentation**
 - [ ] Frequency check, confirm minimum (§4); 1–3 h per molecule, run overnight
-- [ ] HOMO/LUMO surfaces (§4)
+- [x] HOMO/LUMO surfaces (§4): `calc --orbitals`, render writes homo.png/lumo.png (2026-11-12)
 - [x] ESP min/max markers on the map (§4): `render --extrema` (2026-11-11)
 - [x] H-bonds as dashed lines (`render --hbonds`, 2026-11-11), double bonds as double sticks (`bond_list`, 2026-11-12) (§4)
 - [ ] Open-shell UKS (§4)
