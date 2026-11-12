@@ -112,7 +112,8 @@ next session.
 - [x] Restart / checkpoint for `--opt` (§4) (2026-11-12, night; `opt_traj.xyz`)
 - [x] DFT re-ranking of top MMFF conformers (§2) (2026-11-12, night; `--rerank N`)
 - [x] Full element colour table (2026-11-11, day session)
-- [ ] Redo the folded vs. extended comparison with all of the above
+- [x] Redo the folded vs. extended comparison with all of the above (2026-11-12: folded lower by
+  3.15 kcal/mol in water + D3, vs. 6.3 in gas; ext opt stopped at step 58, see CLAUDE.md)
 
 **Week 2: credibility + presentation**
 - [ ] Frequency check, confirm minimum (§4); 1–3 h per molecule, run overnight
@@ -146,7 +147,28 @@ refuse a case, but they can't pick the right method).
 Expected outcome: ~70–80% of the list working and validated; weeks 1–2 alone
 give better-documented PAM figures than the paid service.
 
+## Found 2026-11-12 (not scheduled yet)
+
+- **Loose convergence for floppy chains**: `pam3s_ext` met the energy and gradient criteria
+  by step ~30 but crept on for 28 more steps (~7 min each) on the displacement criterion.
+  Add e.g. `--opt-conv loose` (geomeTRIC `convergence_set='GAU_LOOSE'`) or a max-steps cap,
+  recorded in method.txt.
+- **Dark seams on folded surfaces**: crescent/ribbon artefacts where the surface folds over
+  itself, much worse at off-axis `--view`s. Blocks a publishable fold figure.
+- **method.txt for an `.xyz` single point** of a geometry optimised elsewhere says "geometry not
+  optimised in solvent"; let calc take a note (or detect `opt_traj.xyz` origin) so the caption
+  is right without hand-editing.
+- **View choice**: a throwaway script in the 2026-11-12 day session scored 600 camera directions
+  (extrema visible via the render ray test, C=O side-on, H-bond side-on, projected atom overlaps).
+  Worth folding into `render --auto-view`, with the seams and readability of the chain in the
+  score (its top picks for fold looked tangled and had bad seams).
+
 ## Notes / lessons
+
+- A resumed `--opt` first re-evaluates the last frame; don't write it again (fixed 585b6f2).
+- ESP extrema on the far side of the surface must not get an always-visible label: it lands
+  over the wrong atoms. Test visibility with a ray from just off the surface (a ray from the
+  surface itself grazes it at the rim and mislabels visible points as hidden).
 
 - "Intramolecular H-bond" must exclude an amide H's own C=O: syn H–N–C=O
   puts that H ~2.45 Å from its O by geometry alone. `hbonds()` requires the

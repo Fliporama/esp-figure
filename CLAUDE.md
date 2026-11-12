@@ -37,9 +37,23 @@ First target molecule: polyacrylamide (PAM) oligomer.
 - Gas-phase syndiotactic control done 2026-11-11 (B3LYP/6-31G(d), no D3, no solvent):
   `runs/pam3s_gas_fold` E -782.485784, 1 H-bond (H26...O16 2.00 A), ESP -0.071/+0.082;
   `runs/pam3s_gas_ext` E -782.475815, 0 H-bonds (stayed open), ESP -0.066/+0.069.
-  Folded lower by 6.3 kcal/mol (pilot, unspecified stereo: 5.5). Compare with the queued
-  pam3s_fold/pam3s_ext (--d3 --solvent water; not run yet, need solvent/restart/rerank
-  built first) to separate the solvent/dispersion effects.
+  Folded lower by 6.3 kcal/mol (pilot, unspecified stereo: 5.5).
+- **Folded vs. extended in water done 2026-11-12** (B3LYP-D3(BJ)/6-31G(d) + IEF-PCM water,
+  geometry optimised in PCM; syndiotactic PAM3):
+  `runs/pam3s_fold` (`--rerank 5`; DFT confirmed the MMFF #1 pick, next +1.3 kcal/mol)
+  E −782.58249894, 1 H-bond (H26···O16 1.95 Å), ESP −0.0864/+0.1021;
+  `runs/pam3s_ext_sp` E −782.57747593, 0 H-bonds, ESP −0.0891/+0.1076.
+  **Folded lower by 3.15 kcal/mol** (D3 −1.06, SCF+solvation −2.09) vs. 6.3 in gas without
+  D3: solvent roughly halves the folded preference, but folded stays lower. Energies, not
+  free energies (no entropy, implicit solvent can't H-bond the amides): one conformer each,
+  not "PAM3 folds in water".
+  Ext optimisation was **stopped at step 58** (`--no-hbond` start, 6 h): energy (<1e-6 Eh/step)
+  and gradients (rms 3.7e-5) converged, displacement criterion not met (floppy torsions creep).
+  `pam3s_ext_sp` is a single point on that last frame (`runs/pam3s_ext/last_frame.xyz`);
+  its method.txt says "geometry not optimised in solvent", which is wrong for this
+  geometry — fix the caption by hand. Figures rendered at ±0.10 rainbow / ±0.05 rwb
+  (`--limit 0.10,0.05`). Ext default view is usable; fold needs a `--view` (best candidate
+  `--view=0.56,-0.52,-0.64`) **and** the dark-seam artefact fixed (worse at off-axis views).
 - Night runner (autonomous overnight work) designed and planned:
   `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
   `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main
@@ -73,6 +87,15 @@ First target molecule: polyacrylamide (PAM) oligomer.
   the interface built in d4afae9 (`esp_extrema`, `hbond_pairs`); extrema
   passes, bonds skips (77) until `bond_list` (double sticks) exists. A PAM3
   frequency run (~1 h) is a queue job, not a sanity check.
+- **Night 2 + day session 2026-11-12** (merged, all sanity/regression pass): night built
+  `--solvent water`, restart (`opt_traj.xyz`), `--rerank N`; helpers built double sticks
+  (`bond_list`; `bonds` now passes) and `--orbitals` (HOMO/LUMO cubes, energies, homo/lumo.png,
+  lobes at opacity 0.3 so atom colours stay readable). Day fixes: restart no longer writes the
+  restart point twice; `night.ps1` copies `runs/<name>` of queued jobs into the worktree so
+  `--opt` resumes across nights; back-side ESP extrema are listed in a corner note (not
+  labelled through the molecule) with a `--view` hint; `--limit rainbow,rwb`; caption keeps
+  the other style's line. Open for the user: 4 h per-job cap (`-JobTimeoutSec 14400`) too
+  short for cold D3+PCM PAM3 opts; re-rank sanity "distinct" threshold 1e-7 Eh → 1e-4.
 ## This machine
 
 Ubuntu 26.04 in WSL, installed with `--no-launch`, so **root only, no Linux
@@ -94,8 +117,9 @@ wsl -d Ubuntu -u root --cd "/mnt/c/dev/molcule visualizer" -e /root/esp-venv/bin
 | ESP | Computed **only at surface vertices** | See pitfalls |
 | Rendering | PyVista offscreen, 1600×1000, SSAA | Close match to GaussView look |
 
-Observed ESP range for the PAM trimer: −0.065 to +0.071 a.u. → colour limits
-±0.06 (rainbow) and ±0.03 (red-white-blue) are sensible.
+Observed ESP range for the PAM trimer: −0.065 to +0.071 a.u. in the gas phase →
+colour limits ±0.06 (rainbow) and ±0.03 (red-white-blue) are sensible. In PCM water the
+extremes grow ~20–25 % (−0.089 to +0.108): use ±0.10 / ±0.05 (`--limit 0.10,0.05`).
 
 ## Rules for figures
 
