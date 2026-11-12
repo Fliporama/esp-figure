@@ -19,6 +19,10 @@ GRID = 100       # density grid points per axis
 MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near the O atoms
 LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 H2EV = 27.211386 # Hartree -> eV
+OPT_CONV = {  # geomeTRIC rules, recorded in method.txt
+    "gau": "gau (geomeTRIC default, Gaussian-like: energy 1e-6 Eh, gradient rms/max 3e-4/4.5e-4, displacement rms/max 1.2e-3/1.8e-3, all five)",
+    "qchem": "qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)",
+}
 ORB_ISO = 0.02   # orbital isovalue (a.u.) for the HOMO/LUMO pictures, a common GaussView-like choice
 ORB_COLORS = ("#2e8b57", "#8e44ad")   # +/- phase: green/purple, so no one reads them as ESP red/blue
 ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not tint the atoms' element colours
@@ -201,7 +205,7 @@ def geometry(spec, charge, no_hbond=False, top=1):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False):
+         orbitals=False, opt_conv="gau"):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
@@ -292,7 +296,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             with traj.open("a", encoding="utf-8") as f:
                 f.write(xyz_text(sym, env["mol"].atom_coords() * B2A, f"{tag} | step {done + len(steps)} E {env['energy']:.10f}"))
         frame.seen = False
-        mol = optimize(mf, callback=frame)
+        # qchem: GAU gradient criteria AND (energy OR displacement); floppy chains otherwise creep on displacement
+        mol = optimize(mf, callback=frame, **({"qccnv": True} if opt_conv == "qchem" else {}))
         mf = scf(mol)
         geo = f"{level} optimised geometry (geomeTRIC), started from {geo}"
     if not mf.converged:
@@ -332,7 +337,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 name: {name}
 charge: {charge}
 atoms: {len(sym)}
-geometry: {geo}{f"{chr(10)}optimisation steps: {len(steps)} (this run; trajectory in opt_traj.xyz)" if opt else ""}
+geometry: {geo}{f"{chr(10)}optimisation steps: {len(steps)} (this run; trajectory in opt_traj.xyz)" if opt else ""}{f"{chr(10)}optimisation convergence: {OPT_CONV[opt_conv]}" if opt else ""}
 intramolecular H-bonds in final geometry (H···N/O < {HB_CUT} Å): {hbonds(rdm, xyz) if rdm else "n/a"}
 level of theory: {level}, density fitting (PySCF default auxiliary basis); ESP integrals exact
 SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
@@ -346,9 +351,107 @@ caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density iso
     return out
 
 
+def auto_view(surf, sym, xyz, n=600):
+    """Camera direction that shows V_s,min (weight 2) and V_s,max, C=O double bonds and H-bonds side-on, few overlapping
+    heavy atoms, and stays near the chain-flat default (thinnest axis), which the day-session search showed matters:
+    without it the top picks looked tangled. Same front/back ray test as render()."""
+    c0 = xyz.mean(0)
+    ev = np.linalg.svd(xyz - c0)[2]
+    ex, bonds = esp_extrema(surf, sym, xyz), bond_list(sym, xyz)
+    hb = hbond_pairs(mol_from_xyz(sym, xyz), xyz)
+    nrm = surf.compute_normals(point_normals=True, cell_normals=False).point_data["Normals"]
+    starts = []
+    for x in ex:
+        nv = nrm[surf.find_closest_point(x["point"])]
+        starts.append(x["point"] + 0.3 * (nv if nv @ (x["point"] - c0) > 0 else -nv))
+    dbl = [(i, j) for i, j, o in bonds if o == 2]
+    heavy = [k for k, s_ in enumerate(sym) if s_ != "H"]
+    k = np.arange(n) + 0.5                     # Fibonacci sphere
+    phi, th = np.arccos(1 - 2 * k / n), np.pi * (1 + 5 ** 0.5) * k
+    best = (-1e9, ev[2])
+    for d in np.c_[np.cos(th) * np.sin(phi), np.sin(th) * np.sin(phi), np.cos(phi)]:
+        vis = [not len(surf.ray_trace(st, st + 100 * d)[0]) for st in starts]
+        co = [(1 - abs((xyz[j] - xyz[i]) @ d) / np.linalg.norm(xyz[j] - xyz[i]))
+              * (1 - abs(stick_offsets(xyz, bonds, i, j, 2, d)[1] @ d) / 0.11) for i, j in dbl] or [1.0]
+        hbs = [1 - abs((xyz[a] - xyz[h]) @ d) / np.linalg.norm(xyz[a] - xyz[h]) for h, a in hb] or [1.0]
+        P = xyz[heavy] - np.outer(xyz[heavy] @ d, d)
+        ov = (np.linalg.norm(P[:, None] - P[None], axis=2) < 0.6).sum() - len(heavy)
+        score = 2.0 * vis[0] + vis[1] + np.mean(co) + np.mean(hbs) - 0.15 * ov + 1.5 * abs(d @ ev[2])
+        best = max(best, (score, d), key=lambda t: t[0])
+    return best[1]
+
+
+def colormap(style):
+    """Same convention in every style: red = negative, blue = positive."""
+    from matplotlib.colors import LinearSegmentedColormap
+    return {"rainbow": LinearSegmentedColormap.from_list("gv", ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff"]),
+            "rwb": LinearSegmentedColormap.from_list("rwb", ["#e8413a", "#ffffff", "#3a4fe8"])}[style]
+
+
+def panel(names, labels=None, style="rainbow", out="runs/panel.png", root="runs"):
+    """Rendered ESP maps side by side with one shared colour bar, plus a caption file (<out>.txt).
+    Refuses maps rendered with different colour limits; gives energy differences only at one level of theory."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+    runs = []
+    for n in names:
+        d = Path(root) / n
+        cap, log = ((d / f).read_text(encoding="utf-8") for f in ("caption.txt", "method.txt"))
+        m = re.search(rf"^{style}_esp\.png: colour scale -(\S+) to", cap, re.M)
+        if not m:
+            sys.exit(f"panel: {d} has no {style}_esp.png in caption.txt; render it first")
+        sym, xyz = read_xyz(d / "mol.xyz")
+        img = plt.imread(d / f"{style}_esp.png")[..., :3]
+        img = img[:, : int(img.shape[1] * 0.86)]           # drop the render's own colour bar (title starts at x ~ 0.866)
+        ink = img.min(axis=2) < 0.97                         # crop the white margins
+        r, c = np.flatnonzero(ink.any(1)), np.flatnonzero(ink.any(0))
+        img = img[max(r[0] - 15, 0): r[-1] + 15, max(c[0] - 15, 0): c[-1] + 15]
+        runs.append(dict(label=n, lim=float(m.group(1)), img=img, cap=re.search(r"^caption: (.+)", log, re.M).group(1),
+                         e=float(re.search(r"SCF energy: (\S+)", log).group(1)),
+                         level=re.search(r"level of theory: (.+)", log).group(1), atoms=sym,
+                         esp=re.search(r"ESP range on surface: (\S+) to (\S+)", log).groups(),
+                         hb=len(hbond_pairs(mol_from_xyz(sym, xyz), xyz))))
+    for k, lab in enumerate(labels or []):
+        runs[k]["label"] = lab
+    if len({x["lim"] for x in runs}) > 1:
+        sys.exit("panel: colour limits differ (" + ", ".join(f"{x['label']} {x['lim']}" for x in runs) +
+                 "); maps meant to be compared must share them: re-render with the same --limit")
+    same = len({x["level"] for x in runs}) == 1 and len({tuple(sorted(x["atoms"])) for x in runs}) == 1
+    e0, lim = min(x["e"] for x in runs), runs[0]["lim"]
+    asp = max(x["img"].shape[0] / x["img"].shape[1] for x in runs)    # pad to one shape so titles line up
+    for x in runs:
+        h, w = x["img"].shape[:2]
+        H, W = max(h, int(round(w * asp))), max(w, int(round(h / asp)))
+        pad = np.ones((H, W, 3))
+        pad[(H - h) // 2:(H - h) // 2 + h, (W - w) // 2:(W - w) // 2 + w] = x["img"]
+        x["img"] = pad
+    fig, axs = plt.subplots(1, len(runs), figsize=(5.2 * len(runs) + 1.0, 5.2 * asp + 1.1), dpi=200, squeeze=False)
+    fig.subplots_adjust(left=0.01, right=0.9, top=0.84, bottom=0.02, wspace=0.04)
+    for k, (ax, x) in enumerate(zip(axs[0], runs)):
+        x["de"] = f"ΔE = {(x['e'] - e0) * 627.5095:+.2f} kcal/mol" if same else "ΔE n/a (different molecule or level)"
+        ax.imshow(x["img"])
+        ax.axis("off")
+        ax.set_title(f"({chr(97 + k)}) {x['label']}", loc="left", fontsize=13, pad=30)
+        ax.text(0, 1.01, f"{x['de']}  ·  {x['hb']} H-bond{'s' if x['hb'] != 1 else ''}\n"
+                f"ESP {float(x['esp'][0]):+.3f} to {float(x['esp'][1]):+.3f} a.u.", transform=ax.transAxes,
+                ha="left", va="bottom", fontsize=10, color="#333333")
+    cb = fig.colorbar(ScalarMappable(Normalize(-lim, lim), colormap(style)), cax=fig.add_axes([0.92, 0.12, 0.015, 0.62]))
+    cb.set_label("ESP (a.u.)")
+    out = Path(out)
+    fig.savefig(out, bbox_inches="tight", pad_inches=0.15, facecolor="white")
+    plt.close(fig)
+    txt = [f"{out.name}: ESP maps, {style} colour scale -{lim} to +{lim} a.u. (red = negative, blue = positive), "
+           f"same limits in every panel; ΔE relative to the lowest-energy panel" + ("" if same else " (not given: runs differ)")]
+    txt += [f"({chr(97 + k)}) {x['label']} [{n}]: {x['de']}; {x['hb']} H-bond(s); {x['cap']}" for k, (x, n) in enumerate(zip(runs, names))]
+    out.with_suffix(".txt").write_text("\n".join(txt) + "\n", encoding="utf-8")
+    print(f"wrote {out} and {out.with_suffix('.txt')}")
+
+
 def render(name, style="both", limit=None, view=None, root="runs", extrema=False, hbond_lines=False):
     import pyvista as pv
-    from matplotlib.colors import LinearSegmentedColormap
     out = Path(root) / name
     sym, xyz = read_xyz(out / "mol.xyz")
     surf = pv.read(out / "surf.vtk")
@@ -377,6 +480,10 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                 p.add_mesh(pv.Cylinder(center=c, direction=d, radius=0.035, height=0.12, resolution=16), color="#555555")
 
     hb = hbond_pairs(mol_from_xyz(sym, xyz), xyz) if hbond_lines else []
+    auto = isinstance(view, str) and view == "auto"
+    if auto:
+        view = auto_view(surf, sym, xyz)
+        print("--view auto picked --view=" + ",".join(f"{c:.2f}" for c in view))
     ex = esp_extrema(surf, sym, xyz) if extrema else []
     cam = np.asarray(view, float) if view is not None else ev[2]   # camera direction of the ESP pictures (tilt 0)
     cam = cam / np.linalg.norm(cam)
@@ -397,7 +504,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                                point_size=1, shape_opacity=0.7, always_visible=True, show_points=False)
         back = [f"V_s,{e['kind']} {e['value']:+.3f} a.u. at {e['atom']}: back side, not visible" for e in ex if not e["front"]]
         if back:
-            p.add_text("\n".join(back), position="lower_left", font_size=14, color="black")
+            p.add_text("\n".join(back), position=(30, 25), font_size=14, color="black")   # pixels: keep off the edge
 
     def aim(p, tilt=0.0):
         if view is None:                      # look down the thinnest axis, long axis horizontal
@@ -436,10 +543,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         p.screenshot(path)
         p.close()
 
-    cmaps = {  # same convention in every style: red = negative, blue = positive
-        "rainbow": LinearSegmentedColormap.from_list("gv", ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff"]),
-        "rwb": LinearSegmentedColormap.from_list("rwb", ["#e8413a", "#ffffff", "#3a4fe8"]),
-    }
+    cmaps = {st: colormap(st) for st in ("rainbow", "rwb")}
     shoot(out / "ball.png")
     styles = ["rainbow", "rwb"] if style == "both" else [style]
     lims = dict(LIMITS)
@@ -450,6 +554,8 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
     notes = [l for l in (cap.read_text(encoding="utf-8").splitlines() if cap.exists() else [])
              if re.match(r"(rainbow|rwb)_esp\.png:", l) and l.split("_")[0] not in styles and (out / l.split(":")[0]).exists()]
     front = front_layer(surf)                 # same camera for every ESP style
+    if auto:
+        notes.append("view: --view auto picked --view=" + ",".join(f"{c:.2f}" for c in view))
     for st in styles:
         lim = lims[st]
         shoot(out / f"{st}_esp.png", lambda p: markers(p) or p.add_mesh(
@@ -506,18 +612,28 @@ if __name__ == "__main__":
     c.add_argument("--rerank", type=int, default=0, metavar="N",
                    help="DFT single points on the N lowest distinct MMFF conformers, continue with the lowest (PAM3: ~2 min each in gas phase)")
     c.add_argument("--orbitals", action="store_true", help="also write HOMO/LUMO cubes + energies; render then draws homo/lumo.png")
+    c.add_argument("--opt-conv", choices=sorted(OPT_CONV), default="gau",
+                   help="--opt convergence: gau (geomeTRIC default) or qchem (gradient AND energy-or-displacement; for floppy chains)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
     r.add_argument("--limit", type=lambda s: [float(x) for x in s.split(",")],
                    help="colour limit in a.u.: one value for both styles, or rainbow,rwb e.g. 0.10,0.05 (default 0.06,0.03)")
-    r.add_argument("--view", type=lambda s: [float(x) for x in s.split(",")],
-                   help="camera direction, e.g. --view=0,0,1 (default: along the thinnest molecular axis)")
+    r.add_argument("--view", type=lambda s: s if s == "auto" else [float(x) for x in s.split(",")],
+                   help="camera direction, e.g. --view=0,0,1, or auto (scores 600 directions: extrema, C=O, H-bonds, chain flat); "
+                        "default: along the thinnest molecular axis")
     r.add_argument("--extrema", action="store_true", help="mark the most negative/positive ESP point (V_s,min/max) with values")
     r.add_argument("--hbonds", action="store_true", help="draw intramolecular H-bonds as dashed lines")
+    q = sub.add_parser("panel", help="rendered ESP maps side by side, one colour bar (seconds)")
+    q.add_argument("names", nargs="+", help="run names, already rendered with the same --limit")
+    q.add_argument("--labels", type=lambda s: s.split(","), help="panel titles, comma-separated, e.g. folded,extended")
+    q.add_argument("--style", choices=["rwb", "rainbow"], default="rainbow")
+    q.add_argument("--out", default="runs/panel.png")
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals)
+             orbitals=a.orbitals, opt_conv=a.opt_conv)
+    elif a.cmd == "panel":
+        panel(a.names, a.labels, a.style, a.out)
     else:
         render(a.name, a.style, a.limit, a.view, extrema=a.extrema, hbond_lines=a.hbonds)

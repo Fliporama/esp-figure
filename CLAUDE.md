@@ -50,10 +50,14 @@ First target molecule: polyacrylamide (PAM) oligomer.
   Ext optimisation was **stopped at step 58** (`--no-hbond` start, 6 h): energy (<1e-6 Eh/step)
   and gradients (rms 3.7e-5) converged, displacement criterion not met (floppy torsions creep).
   `pam3s_ext_sp` is a single point on that last frame (`runs/pam3s_ext/last_frame.xyz`);
-  its method.txt says "geometry not optimised in solvent", which is wrong for this
-  geometry — fix the caption by hand. Figures rendered at ±0.10 rainbow / ±0.05 rwb
+  its method.txt said "geometry not optimised in solvent", wrong for this geometry: corrected
+  by hand 2026-11-12 (originals kept in brackets). `pam3s_{fold,ext}_orb` still carry the
+  wrong line (same `.xyz` single-point issue, backlog). Figures rendered at ±0.10 rainbow / ±0.05 rwb
   (`--limit 0.10,0.05`). Ext default view is usable; fold is rendered at
-  `--view=0.56,-0.52,-0.64` (both extrema, H-bond and one C=O double visible); dark seams fixed.
+  `--view=0.56,-0.52,-0.64` (both extrema, H-bond and one C=O double visible; `--view auto` picks the
+  same); dark seams fixed. Comparison panels: `runs/pam3s_panel_{rainbow,rwb}.png` (+ .txt caption).
+  HOMO/LUMO (single points with `--orbitals`, `runs/pam3s_{fold,ext}_orb`): fold −6.75/+0.53 eV,
+  ext −6.71/+0.61 eV; positive LUMOs in 6-31G(d) are diffuse and say little.
 - Night runner (autonomous overnight work) designed and planned:
   `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
   `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main

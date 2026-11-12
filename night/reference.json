@@ -18,6 +18,7 @@
   "orbitals": {"script": "night/sanity/orbitals.py", "item": "HOMO/LUMO surfaces", "timeout": 600},
   "extrema":  {"script": "night/sanity/extrema.py",  "item": "ESP min/max markers on the map", "timeout": 600},
   "bonds":    {"script": "night/sanity/bonds.py",    "item": "H-bonds as dashed lines, double bonds as double sticks", "timeout": 300},
-  "uks":      {"script": "night/sanity/uks.py",      "item": "Open-shell UKS", "timeout": 900}
+  "uks":      {"script": "night/sanity/uks.py",      "item": "Open-shell UKS", "timeout": 900},
+  "optconv":  {"script": "night/sanity/optconv.py",  "item": "Optimisation convergence --opt-conv qchem", "timeout": 1200}
  }
 }

@@ -149,19 +149,19 @@ give better-documented PAM figures than the paid service.
 
 ## Found 2026-11-12 (not scheduled yet)
 
-- **Loose convergence for floppy chains**: `pam3s_ext` met the energy and gradient criteria
-  by step ~30 but crept on for 28 more steps (~7 min each) on the displacement criterion.
-  Add e.g. `--opt-conv loose` (geomeTRIC `convergence_set='GAU_LOOSE'`) or a max-steps cap,
-  recorded in method.txt.
+- ~~Loose convergence for floppy chains~~ done 2026-11-12: `--opt-conv qchem` (geomeTRIC `qccnv`:
+  RMS gradient AND (energy OR RMS displacement); GAU_LOOSE rejected, its gradients are ~6x looser).
+  Sanity `optconv` (formamide) only shows "no worse": formamide is too stiff to show the gain.
 - ~~Dark seams on folded surfaces~~ fixed 2026-11-12: render draws only the surface layer nearest
   the camera (CLAUDE.md pitfall 3). A faint fringe remains where one lobe's edge overlaps another.
 - **method.txt for an `.xyz` single point** of a geometry optimised elsewhere says "geometry not
   optimised in solvent"; let calc take a note (or detect `opt_traj.xyz` origin) so the caption
   is right without hand-editing.
-- **View choice**: a throwaway script in the 2026-11-12 day session scored 600 camera directions
-  (extrema visible via the render ray test, C=O side-on, H-bond side-on, projected atom overlaps).
-  Worth folding into `render --auto-view`, with the seams and readability of the chain in the
-  score (its top picks for fold looked tangled and had bad seams).
+- ~~View choice~~ done 2026-11-12: `render --view auto` (600 directions; extrema visible, C=O and
+  H-bonds side-on, few overlaps, plus a pull towards the chain-flat default). Picks the hand-chosen
+  fold view; ext's pick is fine but no better than its default.
+- Comparison figure done 2026-11-12: `esp_figure.py panel A B --labels ...` (shared colour bar, refuses
+  different limits, ΔE only at one level of theory, writes <out>.txt).
 
 ## Notes / lessons
 
