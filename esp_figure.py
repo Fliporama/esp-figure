@@ -378,13 +378,26 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
 
     hb = hbond_pairs(mol_from_xyz(sym, xyz), xyz) if hbond_lines else []
     ex = esp_extrema(surf, sym, xyz) if extrema else []
+    cam = np.asarray(view, float) if view is not None else ev[2]   # camera direction of the ESP pictures (tilt 0)
+    cam = cam / np.linalg.norm(cam)
+    nrm = surf.compute_normals(point_normals=True, cell_normals=False).point_data["Normals"] if ex else None
+    for e in ex:   # on the back if the surface lies between the point and the camera
+        n = nrm[surf.find_closest_point(e["point"])]
+        n = n if n @ (e["point"] - xyz.mean(0)) > 0 else -n   # outward
+        start = e["point"] + 0.3 * n          # off the surface first: a ray from a rim point would graze it
+        e["front"] = not len(surf.ray_trace(start, start + 100 * cam)[0])
+        e["view"] = ",".join(f"{c:.2f}" for c in (e["point"] - xyz.mean(0)) / np.linalg.norm(e["point"] - xyz.mean(0)))
 
-    def markers(p):
-        for e in ex:
+    def markers(p):   # a label drawn over the molecule for a back-side point would sit on the wrong atoms
+        front = [e for e in ex if e["front"]]
+        for e in front:
             p.add_mesh(pv.Sphere(radius=0.15, center=e["point"]), color="#222222")
-        if ex:
-            p.add_point_labels(np.array([e["point"] for e in ex]), [f"{e['value']:+.3f}" for e in ex], font_size=22,
+        if front:
+            p.add_point_labels(np.array([e["point"] for e in front]), [f"{e['value']:+.3f}" for e in front], font_size=22,
                                point_size=1, shape_opacity=0.7, always_visible=True, show_points=False)
+        back = [f"V_s,{e['kind']} {e['value']:+.3f} a.u. at {e['atom']}: back side, not visible" for e in ex if not e["front"]]
+        if back:
+            p.add_text("\n".join(back), position="lower_left", font_size=14, color="black")
 
     def shoot(path, add_surface=None, tilt=0.0):
         p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
@@ -408,9 +421,16 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         "rwb": LinearSegmentedColormap.from_list("rwb", ["#e8413a", "#ffffff", "#3a4fe8"]),
     }
     shoot(out / "ball.png")
-    notes = []
-    for st in (["rainbow", "rwb"] if style == "both" else [style]):
-        lim = limit if limit is not None else LIMITS[st]
+    styles = ["rainbow", "rwb"] if style == "both" else [style]
+    lims = dict(LIMITS)
+    if limit is not None:                     # one value for both styles, or [rainbow, rwb]
+        lv = list(limit) if isinstance(limit, (list, tuple)) else [limit]
+        lims.update(rainbow=lv[0], rwb=lv[-1])
+    cap = out / "caption.txt"                 # keep the line of a style rendered earlier and not redone now
+    notes = [l for l in (cap.read_text(encoding="utf-8").splitlines() if cap.exists() else [])
+             if re.match(r"(rainbow|rwb)_esp\.png:", l) and l.split("_")[0] not in styles and (out / l.split(":")[0]).exists()]
+    for st in styles:
+        lim = lims[st]
         shoot(out / f"{st}_esp.png", lambda p: markers(p) or p.add_mesh(
             surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.3,
             culling="back",   # hide the far side: seen through the near side at grazing angles it shows as jagged stripes
@@ -437,13 +457,16 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                      f"(green +, purple -), not ESP sign; "
                      f"default view tilted ~30 deg from the ESP view")
     for e in ex:
-        notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}, marked): "
-                     f"{e['value']:+.4f} a.u., nearest atom {e['atom']}")
+        notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}): "
+                     f"{e['value']:+.4f} a.u., nearest atom {e['atom']}; "
+                     + ("marked on the map" if e["front"] else f"on the back side, listed in the corner (--view={e['view']} faces it)"))
+        if not e["front"]:
+            print(f"V_s,{e['kind']} is on the back side; --view={e['view']} faces it")
     if hbond_lines:
         notes.append("H-bonds drawn: " + (", ".join(f"{sym[h]}{h + 1}···{sym[a]}{a + 1} {np.linalg.norm(xyz[h] - xyz[a]):.2f} Å"
                                                 for h, a in hb) or "none") + f" (H on N/O, acceptor > 3 bonds away, < {HB_CUT} Å)")
-    (out / "caption.txt").write_text((out / "method.txt").read_text() + "\n".join(notes) +
-                                     f"\nrendering: PyVista {pv.__version__}, VTK {'.'.join(map(str, pv.vtk_version_info))}\n")
+    cap.write_text((out / "method.txt").read_text(encoding="utf-8") + "\n".join(notes) +
+                   f"\nrendering: PyVista {pv.__version__}, VTK {'.'.join(map(str, pv.vtk_version_info))}\n", encoding="utf-8")
     print(f"wrote PNGs to {out}")
 
 
@@ -465,7 +488,8 @@ if __name__ == "__main__":
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
-    r.add_argument("--limit", type=float, help="colour limit in a.u. (default 0.06 rainbow, 0.03 rwb)")
+    r.add_argument("--limit", type=lambda s: [float(x) for x in s.split(",")],
+                   help="colour limit in a.u.: one value for both styles, or rainbow,rwb e.g. 0.10,0.05 (default 0.06,0.03)")
     r.add_argument("--view", type=lambda s: [float(x) for x in s.split(",")],
                    help="camera direction, e.g. --view=0,0,1 (default: along the thinnest molecular axis)")
     r.add_argument("--extrema", action="store_true", help="mark the most negative/positive ESP point (V_s,min/max) with values")
