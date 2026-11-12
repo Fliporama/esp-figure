@@ -60,7 +60,7 @@ try {
         }
     }
     $cap2 =[Math]::Min(28800, [int]($stop.AddHours(-1) - (Get-Date)).TotalSeconds)
-    $jobs = @(Invoke-Queue -QueuePath "$wt\night\queue.txt" -WorktreeWsl $wtWsl -JobTimeoutSec 14400 -TotalTimeoutSec $cap2 -LogDir $logs)
+    $jobs = @(Invoke-Queue -QueuePath "$wt\night\queue.txt" -WorktreeWsl $wtWsl -JobTimeoutSec 21600 -TotalTimeoutSec $cap2 -LogDir $logs)
 
     # Phase 3: review, never past the stop time
     $cap3 = [Math]::Min(3600, [int]($stop - (Get-Date)).TotalSeconds - 120)

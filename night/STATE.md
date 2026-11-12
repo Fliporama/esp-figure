@@ -6,32 +6,26 @@
 - Night 2026-11-12: solvent `--solvent water` (IEF-PCM eps 78.3553, SCF + opt + ESP; `test_solvent.py`),
   restart for `--opt` (`opt_traj.xyz`, resumes from last complete frame; `test_restart.py`),
   DFT re-ranking `--rerank N` (same D3/solvent flags as the run; `test_rerank.py`). All defaults unchanged.
-  Full `check.py --sanity` run once: d3, solvent, restart, rerank all PASS (solvent: water dG_solv -6.46
-  kcal/mol; PAM3 ESP extremes +17..23 %; fold-ext gas -5.51 -> water -2.41 kcal/mol. rerank on PAM3 gas:
-  MMFF #1 was also the DFT lowest, others +1.8..+5.1 kcal/mol). So the redo jobs pam3s_fold / pam3s_ext
-  are queued exactly as in Answers.
-- Notes for the day session:
-  - Mapped ESP with `--solvent` = nuclei + solvated density; PCM surface charges are NOT added (standard,
-    stated in method.txt).
-  - Re-ranking dedupe merges mirror-image conformers (RMSD allows reflection + heavy-atom automorphisms):
-    syndiotactic PAM3 is meso-like (identical ends), so a conformer and its mirror are the same shape.
-    The locked rerank sanity (energies distinct > 1e-7 Eh) can't catch mirror duplicates (~1e-5 Eh DFT
-    grid noise); `test_rerank.py` checks the PAM3 picks differ in MMFF energy. Consider tightening the
-    sanity to > 1e-4 Eh.
-  - Restart resumes geomeTRIC cold (no Hessian carried over), so it saves roughly the steps already done, not more.
+- Day session 2026-11-12 (merged into main, all sanity + regression pass):
+  - Double bonds as double sticks (`bond_list`; `bonds` sanity now passes) and HOMO/LUMO
+    (`calc --orbitals`; `orbitals` sanity passes).
+  - Restart fix: a resumed `--opt` no longer writes the restart point twice.
+  - `night.ps1` copies main's `runs/<name>` into the worktree for every queued job, so `--opt` resumes
+    across nights. Per-job cap raised from 4 h to 6 h (`-JobTimeoutSec 21600`).
+  - Render: back-side ESP extrema listed in a corner note (not labelled through the molecule);
+    `--limit rainbow,rwb`; only the surface layer nearest the camera is drawn (fixes dark seams).
+  - Re-rank sanity: "distinct energies" threshold 1e-7 -> 1e-4 Eh (user-approved; catches mirror duplicates).
+- **Folded vs. extended in water + D3: DONE 2026-11-12. Do not re-queue `pam3s_fold` / `pam3s_ext`.**
+  Fold resumed and converged (`runs/pam3s_fold`, E -782.58249894). Ext was stopped at step 58 (energy and
+  gradients converged, displacement not) and finished as a single point (`runs/pam3s_ext_sp`,
+  E -782.57747593). Folded lower by 3.15 kcal/mol. Figures rendered. Details in CLAUDE.md Status.
 
 ## Skipped (waiting on you)
 
-- Night 2026-11-12 queue: `pam3s_fold` and `pam3s_ext` both timed out (exit 124), no method.txt.
-  fold: rerank done (MMFF #1 = DFT lowest, D3+water), opt 31 steps, E -782.58250, gradients converged,
-  dE/displacement not yet. ext: 5 steps only (queue cap). Both `opt_traj.xyz` kept for restart.
-
 ## Next
-- Re-queue the same two Answers lines (ext first); the restart resumes from `opt_traj.xyz`.
-  4 h job cap is too short (~6.6 min/step); user to decide on a longer cap or one job per night.
-- Then review `runs/pam3s_fold` / `runs/pam3s_ext` against the gas controls `pam3s_gas_fold` /
-  `pam3s_gas_ext`; render with `--view` as needed; then tick "Redo" in IMPROVEMENTS.md.
-- Week 2: frequency check (`freq` sanity waits), HOMO/LUMO (`orbitals`), double sticks (`bond_list`), UKS (`spin`).
+- Week 2 remaining: frequency check (`freq` sanity waits for `calc(freq=...)`), open-shell UKS
+  (`uks` sanity waits for `calc(spin=...)`). Code + sanity only; no PAM3 frequency jobs until the user
+  asks (the ext geometry is not fully converged, so its frequencies need a decision first).
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->
@@ -51,3 +45,5 @@
   `calc C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O --name pam3s_ext --opt --d3 --solvent water --no-hbond`
   (Each ~1.5-3 h. The ext start keeps its `--no-hbond` pick without re-ranking, since re-ranking
   would likely pick a folded shape again.)
+- Redo status (user, 2026-11-12): DONE in the day session (see Done). The two lines above are history:
+  never queue `pam3s_fold` or `pam3s_ext` again unless a new Answer says so.
