@@ -399,6 +399,31 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         if back:
             p.add_text("\n".join(back), position="lower_left", font_size=14, color="black")
 
+    def aim(p, tilt=0.0):
+        if view is None:                      # look down the thinnest axis, long axis horizontal
+            p.view_vector(ev[2] + tilt * ev[1], viewup=ev[1])
+        else:
+            v = np.asarray(view, float)
+            p.view_vector(v, viewup=ev[1] if abs(v @ ev[1]) < 0.9 * np.linalg.norm(v) else ev[0])
+        p.camera.zoom(1.5)
+
+    def front_layer(mesh):
+        """Only the triangles nearest the camera. Through a 70 % surface, a lobe hidden behind another shows its
+        edge-on rim as dark ribbons (worst on folded shapes, off-axis views). Visible triangles are found by
+        drawing triangle ids as flat colours, without anti-aliasing, at twice the picture size."""
+        ids = np.arange(mesh.n_cells)
+        m = mesh.copy()
+        m.cell_data["id"] = np.c_[ids & 255, ids >> 8 & 255, ids >> 16 & 255].astype(np.uint8)
+        p = pv.Plotter(off_screen=True, window_size=(3200, 2000))
+        p.disable_anti_aliasing()
+        p.set_background("white")             # 0xffffff is never a triangle id
+        p.add_mesh(m, scalars="id", rgb=True, lighting=False, preference="cell")
+        aim(p)
+        img = p.screenshot(return_img=True).astype(np.int64)
+        p.close()
+        code = img[..., 0] + (img[..., 1] << 8) + (img[..., 2] << 16)
+        return mesh.extract_cells(np.unique(code[code < mesh.n_cells])).extract_surface(algorithm="dataset_surface")
+
     def shoot(path, add_surface=None, tilt=0.0):
         p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
         p.set_background("white")
@@ -407,12 +432,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         molecule(p)
         if add_surface:
             add_surface(p)
-        if view is None:                      # look down the thinnest axis, long axis horizontal
-            p.view_vector(ev[2] + tilt * ev[1], viewup=ev[1])
-        else:
-            v = np.asarray(view, float)
-            p.view_vector(v, viewup=ev[1] if abs(v @ ev[1]) < 0.9 * np.linalg.norm(v) else ev[0])
-        p.camera.zoom(1.5)
+        aim(p, tilt)
         p.screenshot(path)
         p.close()
 
@@ -429,16 +449,17 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
     cap = out / "caption.txt"                 # keep the line of a style rendered earlier and not redone now
     notes = [l for l in (cap.read_text(encoding="utf-8").splitlines() if cap.exists() else [])
              if re.match(r"(rainbow|rwb)_esp\.png:", l) and l.split("_")[0] not in styles and (out / l.split(":")[0]).exists()]
+    front = front_layer(surf)                 # same camera for every ESP style
     for st in styles:
         lim = lims[st]
         shoot(out / f"{st}_esp.png", lambda p: markers(p) or p.add_mesh(
-            surf, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.3,
-            culling="back",   # hide the far side: seen through the near side at grazing angles it shows as jagged stripes
+            front, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.3,
             scalar_bar_args=dict(title="ESP (a.u.)\n", fmt="%.3f", n_labels=5, color="black", vertical=True,
                                  position_x=0.88, position_y=0.2, width=0.05, height=0.6,
                                  title_font_size=28, label_font_size=24)))
         notes.append(f"{st}_esp.png: colour scale -{lim} to +{lim} a.u. ({st}; red = negative, blue = positive; "
-                     f"values beyond the limits are shown at the end colours)")
+                     f"values beyond the limits are shown at the end colours; only the surface layer facing the "
+                     f"viewer is drawn)")
     for k in ("homo", "lumo"):
         if not (out / f"{k}.cube").exists():
             continue

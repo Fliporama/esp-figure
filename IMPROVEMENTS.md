@@ -153,8 +153,8 @@ give better-documented PAM figures than the paid service.
   by step ~30 but crept on for 28 more steps (~7 min each) on the displacement criterion.
   Add e.g. `--opt-conv loose` (geomeTRIC `convergence_set='GAU_LOOSE'`) or a max-steps cap,
   recorded in method.txt.
-- **Dark seams on folded surfaces**: crescent/ribbon artefacts where the surface folds over
-  itself, much worse at off-axis `--view`s. Blocks a publishable fold figure.
+- ~~Dark seams on folded surfaces~~ fixed 2026-11-12: render draws only the surface layer nearest
+  the camera (CLAUDE.md pitfall 3). A faint fringe remains where one lobe's edge overlaps another.
 - **method.txt for an `.xyz` single point** of a geometry optimised elsewhere says "geometry not
   optimised in solvent"; let calc take a note (or detect `opt_traj.xyz` origin) so the caption
   is right without hand-editing.

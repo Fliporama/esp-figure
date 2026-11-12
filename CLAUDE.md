@@ -52,8 +52,8 @@ First target molecule: polyacrylamide (PAM) oligomer.
   `pam3s_ext_sp` is a single point on that last frame (`runs/pam3s_ext/last_frame.xyz`);
   its method.txt says "geometry not optimised in solvent", which is wrong for this
   geometry — fix the caption by hand. Figures rendered at ±0.10 rainbow / ±0.05 rwb
-  (`--limit 0.10,0.05`). Ext default view is usable; fold needs a `--view` (best candidate
-  `--view=0.56,-0.52,-0.64`) **and** the dark-seam artefact fixed (worse at off-axis views).
+  (`--limit 0.10,0.05`). Ext default view is usable; fold is rendered at
+  `--view=0.56,-0.52,-0.64` (both extrema, H-bond and one C=O double visible); dark seams fixed.
 - Night runner (autonomous overnight work) designed and planned:
   `docs/superpowers/specs/2026-11-11-night-runner-design.md`,
   `docs/superpowers/plans/2026-11-11-night-runner.md`; merged into main
@@ -138,10 +138,14 @@ extremes grow ~20–25 % (−0.089 to +0.108): use ±0.10 / ±0.05 (`--limit 0.1
 2. **Grid box too tight → holes in the surface** near carbonyl oxygens.
    Use `cubegen.density(..., margin=6.0)` (bohr) or more; default is too small.
 3. **Transparent surface shows dark banding** unless depth peeling is on:
-   `plotter.enable_depth_peeling(20)`. It also needs `culling="back"` on the
-   surface: otherwise the far side shows through as jagged stripes on compact
-   (DFT-optimised, folded) shapes. Opacity 0.7 keeps the colours as strong as
-   the old two-layer 0.55.
+   `plotter.enable_depth_peeling(20)`. Back-face culling is not enough on
+   compact (folded) shapes: a lobe hidden behind another also faces the camera,
+   and its edge-on rim shows through as dark ribbons, worst at off-axis views.
+   `render()` draws only the layer nearest the camera (`front_layer`: triangle
+   ids rendered as flat colours, no anti-aliasing, 2× size; a one-ring
+   neighbour grow made jagged overlaps, so none). Mesh, winding and normals
+   were checked and are fine (2026-11-12). Opacity 0.7 keeps the colours as
+   strong as the old two-layer 0.55.
 4. **Camera angle**: look along the molecule's thinnest principal axis, with
    the long axis horizontal (SVD of centred coordinates), so the chain lies flat.
 5. Cube files are in **bohr**; PyVista scene is in Å. Convert with 0.529177.
