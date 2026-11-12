@@ -1,16 +1,1 @@
-I wrote and committed the night report as `night: report` (a21db73). The night runner script pushes the branch.
-
-**Verdict: ✅ merge.**
-- All 4 regression checks pass.
-- The sanity checks for tonight's three new features all pass: implicit solvent (`--solvent water`), restart for `--opt`, and DFT re-ranking (`--rerank N`). No sanity check failed.
-
-**The main problem: both redo jobs timed out, so there is still no folded vs. extended result in water with D3.**
-- **`pam3s_fold`:** re-ranking finished, and the MMFF lowest conformer was also the lowest by DFT. The geometry optimisation then ran 31 steps, about 6.6 min each, before the 4 h per-job limit stopped it. At that point the gradient criteria were met, but the energy change and step size were not. That is typical for a floppy chain, and I expect another 5–20 steps.
-- **`pam3s_ext`:** only 5 steps before the queue's overall cut-off (one hour before the stop time) ended it. It is far from converged, so comparing its energy with the folded run would mean nothing yet.
-- Both runs kept their step-by-step geometry file (`opt_traj.xyz`). If you re-queue the same two lines, the new restart feature continues from there.
-
-**Decisions for you:**
-1. Re-queue both jobs with `pam3s_ext` first, and either raise the 4 h per-job limit (6 h would do) or run one job per night.
-2. Tighten the locked re-ranking sanity check from 1e-7 to 1e-4 Eh. At 1e-7 it can't catch mirror-image duplicate conformers, whose energies differ by about 1e-5 Eh of numerical noise. That file is locked, so only you can change it.
-
-No figures were made tonight because no job finished. I updated `night/STATE.md` with the job status and next steps. In `IMPROVEMENTS.md`, phase 1 ticked only the three features whose sanity checks passed, and I left those ticks as they are.
+API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)
