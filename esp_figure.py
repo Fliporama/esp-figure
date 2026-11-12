@@ -285,9 +285,13 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         steps = []
 
         def frame(env):                        # called by geomeTRIC once per step
+            if done and not frame.seen:        # a resumed run first re-evaluates the last frame: already in the file
+                frame.seen = True
+                return
             steps.append(env["energy"])
             with traj.open("a", encoding="utf-8") as f:
                 f.write(xyz_text(sym, env["mol"].atom_coords() * B2A, f"{tag} | step {done + len(steps)} E {env['energy']:.10f}"))
+        frame.seen = False
         mol = optimize(mf, callback=frame)
         mf = scf(mol)
         geo = f"{level} optimised geometry (geomeTRIC), started from {geo}"

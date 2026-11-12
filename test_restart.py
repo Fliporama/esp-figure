@@ -23,9 +23,10 @@ with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
     assert abs(e_res - e_full) < 1e-6 and n_res < n_full, (e_res, e_full, n_res, n_full)
     assert "restarted from step 3" in log, log
     resumed = (Path(b) / "f" / "opt_traj.xyz").read_text(encoding="utf-8").splitlines()
+    assert len(resumed) == (3 + n_res) * 8, (len(resumed), n_res)   # restart point not written again
     xyz = lambda rows: np.array([r.split()[1:4] for r in rows], float)
-    d = np.abs(xyz(resumed[3 * 8 + 2:4 * 8]) - xyz(lines[2 * 8 + 2:3 * 8])).max()
-    assert d < 1e-5, f"resumed run did not start at frame 3 (max diff {d} Å)"   # 6-decimal round trip
+    d = np.abs(xyz(resumed[3 * 8 + 2:4 * 8]) - xyz(resumed[2 * 8 + 2:3 * 8])).max()
+    assert d > 1e-5, f"frame 4 repeats frame 3 (max diff {d} Å)"     # first new frame is a real step
     assert "| step 4 E" in resumed[3 * 8 + 1], resumed[3 * 8 + 1]     # numbering continues
     (Path(b) / "g").mkdir()                                          # same frames, but a D3 request: must refuse
     shutil.copy(Path(b) / "keep.xyz", Path(b) / "g" / "opt_traj.xyz")
