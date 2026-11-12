@@ -118,7 +118,7 @@ next session.
 - [ ] Frequency check, confirm minimum (§4); 1–3 h per molecule, run overnight
 - [ ] HOMO/LUMO surfaces (§4)
 - [x] ESP min/max markers on the map (§4): `render --extrema` (2026-11-11)
-- [ ] H-bonds as dashed lines (done: `render --hbonds`, 2026-11-11), double bonds as double sticks (§4)
+- [x] H-bonds as dashed lines (`render --hbonds`, 2026-11-11), double bonds as double sticks (`bond_list`, 2026-11-12) (§4)
 - [ ] Open-shell UKS (§4)
 
 **Week 3: analyses**
