@@ -47,7 +47,19 @@ try {
 
     # Phase 2b: compute (no tokens). Review must start by stop - 1 h.
     if ($DryRun) { Write-Utf8 "$wt\night\queue.txt" "calc O --name dry_water`n" }
-    $cap2 = [Math]::Min(28800, [int]($stop.AddHours(-1) - (Get-Date)).TotalSeconds)
+    # runs/ is git-ignored, so the fresh worktree has none: copy main's runs/<name> for each queued job,
+    # so --opt resumes from opt_traj.xyz (and --rerank results) instead of starting over.
+    foreach ($line in Get-Content "$wt\night\queue.txt" -Encoding UTF8) {
+        if ($line -match '--name\s+(\S+)') {
+            $src = "$repo\runs\$($Matches[1])"; $dst = "$wt\runs\$($Matches[1])"
+            if ((Test-Path $src) -and -not (Test-Path $dst)) {
+                New-Item -ItemType Directory -Force "$wt\runs" | Out-Null
+                Copy-Item $src $dst -Recurse
+                Write-Host "Copied $src for restart"
+            }
+        }
+    }
+    $cap2 =[Math]::Min(28800, [int]($stop.AddHours(-1) - (Get-Date)).TotalSeconds)
     $jobs = @(Invoke-Queue -QueuePath "$wt\night\queue.txt" -WorktreeWsl $wtWsl -JobTimeoutSec 14400 -TotalTimeoutSec $cap2 -LogDir $logs)
 
     # Phase 3: review, never past the stop time
