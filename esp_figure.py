@@ -131,32 +131,40 @@ def esp_extrema(surf, sym, xyz):
     return out
 
 
-def check_input(sym, charge):
-    """Refuse what the method can't do, before any compute: unsupported elements, open-shell (radical) molecules."""
+def check_input(sym, charge, spin=0):
+    """Refuse what the method can't do, before any compute: unsupported elements, open-shell (radical) molecules
+    without an explicit spin, and spins that don't fit the electron count."""
     from pyscf.data.elements import charge as Z
     bad = sorted(set(sym) - ELEMENTS)
     if bad:
         sys.exit(f"unsupported element(s) {', '.join(bad)}: MMFF94 + 6-31G(d) cover only {', '.join(sorted(ELEMENTS))}")
-    if (sum(Z(s) for s in sym) - charge) % 2:
-        sys.exit("odd number of electrons (radical / open-shell): only closed-shell RKS is supported; "
-                 "check the charge, or add the missing H")
+    n = sum(Z(s) for s in sym) - charge
+    if spin == 0 and n % 2:
+        sys.exit("odd number of electrons (radical / open-shell): give --spin (N_alpha - N_beta, e.g. 1 for a "
+                 "doublet) to use UKS; or check the charge, or add the missing H")
+    if spin < 0:
+        sys.exit(f"--spin must be >= 0 (N_alpha - N_beta), got {spin}")
+    if (n - spin) % 2 or spin > n:
+        sys.exit(f"--spin {spin} does not fit {n} electrons (N_alpha - N_beta must have the parity of the electron count)")
 
 
-def geometry(spec, charge, no_hbond=False, top=1):
+def geometry(spec, charge, no_hbond=False, top=1, spin=0):
     """SMILES or .xyz -> symbols, coords (Å), charge, description, RDKit mol (None for .xyz).
     top > 1: coords is a list of the `top` lowest distinct MMFF conformers instead (for DFT re-ranking)."""
     if spec.endswith(".xyz"):
         if no_hbond or top > 1:
             sys.exit("--no-hbond and --rerank need SMILES input (they pick among conformers)")
         sym, xyz = read_xyz(spec)
-        check_input(sym, charge)
+        check_input(sym, charge, spin)
         return sym, xyz, charge, f"geometry read from {Path(spec).name}", None
+    if spin:
+        sys.exit("--spin needs .xyz input: MMFF94 has no radical atom types, so it can't build an open-shell geometry")
     from rdkit import Chem
     from rdkit.Chem import AllChem
     m = Chem.MolFromSmiles(spec)
     if m is None:
         sys.exit(f"bad SMILES: {spec}")
-    check_input([a.GetSymbol() for a in Chem.AddHs(m).GetAtoms()], Chem.GetFormalCharge(m))
+    check_input([a.GetSymbol() for a in Chem.AddHs(m).GetAtoms()], Chem.GetFormalCharge(m), spin)
     # Undefined stereo would make each conformer a random stereoisomer, so "lowest energy" compares different molecules.
     loose = [f"{'stereocentre at' if s.type.name.startswith('Atom') else 'double bond'} atom {s.centeredOn}"
              for s in Chem.FindPotentialStereo(m)
@@ -205,10 +213,14 @@ def geometry(spec, charge, no_hbond=False, top=1):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False):
+         orbitals=False, opt_conv="gau", freq=False, spin=0):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
+    if spin:   # multiplicity in the level string: caption, run cache and restart tag all tell spin states apart
+        level = f"U{level} ({ {1: 'doublet', 2: 'triplet', 3: 'quartet'}.get(spin, f'multiplicity {spin + 1}') })"
+    if spin and (orbitals or freq):   # ponytail: HOMO/LUMO indexing and the UKS Hessian are untested; refuse for now
+        sys.exit("--spin with --orbitals or --freq is not supported yet")
     rerank = rerank if rerank > 1 else 0       # 0 and 1 both mean: take the lowest-MMFF conformer
     if solvent:
         if solvent not in SOLVENTS:
@@ -235,7 +247,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     from pyscf.tools import cubegen
 
     t0 = time.time()
-    sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank)
+    sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank, spin=spin)
     # Restart: --opt appends every step to opt_traj.xyz; a rerun resumes from the last frame (after a crash: no method.txt;
     # or a finished run recomputed for --orbitals/--freq).
     traj, tag, done = out / "opt_traj.xyz", f"{spec} | {level} | charge {charge} | no-hbond {no_hbond} | rerank {rerank}", 0
@@ -256,10 +268,11 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         xyz = np.array([r.split()[1:4] for r in last[2:]], float)
         geo = f"{geo}; {'continued from step' if log.exists() else 'restarted from step'} {done} of " \
               f"{'a finished' if log.exists() else 'an interrupted'} optimisation"
-    build = lambda x: gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, x)], charge=charge, basis="6-31g*", verbose=0)
+    build = lambda x: gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, x)], charge=charge, spin=spin, basis="6-31g*",
+                         verbose=0)
 
     def scf(mol):
-        mf = dft.RKS(mol).density_fit()
+        mf = (dft.UKS if spin else dft.RKS)(mol).density_fit()
         mf.xc = "b3lyp"
         if d3:
             mf.disp = "d3bj"   # pip install pyscf-dispersion; post-SCF energy term, density and ESP unchanged
@@ -309,6 +322,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     if not mf.converged:
         print("WARNING: SCF did not converge; results are not trustworthy", file=sys.stderr)
     dm = mf.make_rdm1()
+    if spin:
+        dm = dm[0] + dm[1]   # total (alpha + beta) density: surface and ESP
     xyz = mol.atom_coords() * B2A
     (out / "mol.xyz").write_text(xyz_text(sym, xyz, name))
 
@@ -338,6 +353,13 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f" (raw count of negative harmonic modes, unscaled; 0 = minimum, a few tens of cm-1 on soft torsions "
                 f"can be numerical noise{'' if opt else '; geometry not optimised here'})\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
+    if spin:
+        s2, ideal = mf.spin_square()[0], spin / 2 * (spin / 2 + 1)
+        bad = abs(s2 - ideal) > 0.1 * ideal
+        if bad:
+            print(f"WARNING: <S^2> {s2:.4f} vs {ideal:.4f}: spin contamination > 10 %", file=sys.stderr)
+        disp += (f"\n<S^2>: {s2:.4f} (UKS, N_alpha - N_beta = {spin}; pure spin state {ideal:.4f}"
+                 f"{'; WARNING: spin contamination > 10 %' if bad else ''}; ESP from the total density)")
     if solvent:
         ws = mf.with_solvent
         disp += (f"\nsolvent: implicit {solvent}, IEF-PCM eps {ws.eps} (PySCF; default vdW radii x {ws.vdw_scale}, "
@@ -625,7 +647,9 @@ if __name__ == "__main__":
     c.add_argument("--rerank", type=int, default=0, metavar="N",
                    help="DFT single points on the N lowest distinct MMFF conformers, continue with the lowest (PAM3: ~2 min each in gas phase)")
     c.add_argument("--orbitals", action="store_true", help="also write HOMO/LUMO cubes + energies; render then draws homo/lumo.png")
-    c.add_argument("--freq", action="store_true",
+    c.add_argument("--spin", type=int, default=0, metavar="N",
+                   help="N_alpha - N_beta (1 = doublet radical); N > 0 uses UKS, ESP from the total density")
+    c.add_argument("--freq",action="store_true",
                    help="harmonic frequencies after the SCF/--opt; 0 imaginary = minimum (analytic Hessian: slow, hours for PAM3)")
     c.add_argument("--opt-conv",choices=sorted(OPT_CONV), default="gau",
                    help="--opt convergence: gau (geomeTRIC default) or qchem (gradient AND energy-or-displacement; for floppy chains)")
@@ -647,7 +671,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
