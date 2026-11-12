@@ -205,7 +205,7 @@ def geometry(spec, charge, no_hbond=False, top=1):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau"):
+         orbitals=False, opt_conv="gau", freq=False):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
@@ -223,7 +223,10 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             sys.exit(f"{out} was computed at a different level of theory (not {level}). Use another --name, or --force.")
         if (f"--rerank {rerank})" not in text) if rerank else ("DFT re-ranking energies" in text):
             sys.exit(f"{out} was computed with a different --rerank setting. Use another --name, or --force.")
-        if not orbitals or (out / "homo.cube").exists():
+        # a recompute (for --orbitals/--freq) must not silently swap an optimised geometry for a draft one, or vice versa
+        if ("optimised geometry (geomeTRIC)" in text) != opt or ("H-bond-free" in text) != no_hbond:
+            sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
+        if (not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text):
             print(f"{out} already computed (use --force to redo)")
             return out
     out.mkdir(parents=True, exist_ok=True)
@@ -233,10 +236,12 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 
     t0 = time.time()
     sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank)
-    # Restart: --opt appends every step to opt_traj.xyz; a rerun after a crash (no method.txt) resumes from the last frame.
+    # Restart: --opt appends every step to opt_traj.xyz; a rerun resumes from the last frame (after a crash: no method.txt;
+    # or a finished run recomputed for --orbitals/--freq).
     traj, tag, done = out / "opt_traj.xyz", f"{spec} | {level} | charge {charge} | no-hbond {no_hbond} | rerank {rerank}", 0
     if force:
         traj.unlink(missing_ok=True)
+        log.unlink(missing_ok=True)   # else a --force run killed mid-opt would later be "continued" as a finished one
     rr = out / "rerank.txt"   # kept on disk so a restarted --opt still reports the re-ranking it started from
     if opt and traj.exists():
         if rerank and not rr.exists():
@@ -249,7 +254,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                      "Delete it, or use --force.")
         traj.write_text("\n".join(L[:done * (len(sym) + 2)]) + "\n", encoding="utf-8")
         xyz = np.array([r.split()[1:4] for r in last[2:]], float)
-        geo = f"{geo}; restarted from step {done} of an interrupted optimisation"
+        geo = f"{geo}; {'continued from step' if log.exists() else 'restarted from step'} {done} of " \
+              f"{'a finished' if log.exists() else 'an interrupted'} optimisation"
     build = lambda x: gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, x)], charge=charge, basis="6-31g*", verbose=0)
 
     def scf(mol):
@@ -324,6 +330,13 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         for k, i in (("homo", h), ("lumo", h + 1)):
             cubegen.orbital(mol, str(out / f"{k}.cube"), mf.mo_coeff[:, i], nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
         orb = f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
+    if freq:   # analytic Hessian (incl. D3/PCM terms of mf); translations/rotations projected out, imaginary -> negative
+        from pyscf.hessian import thermo
+        f = np.sort(thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)["freq_wavenumber"])
+        # ponytail: raw count, no noise cutoff; soft torsions of a loosely converged chain can give small spurious ones
+        orb += (f"frequencies (cm-1): {', '.join(f'{x:.1f}' for x in f)}\nimaginary frequencies: {int((f < 0).sum())}"
+                f" (raw count of negative harmonic modes, unscaled; 0 = minimum, a few tens of cm-1 on soft torsions "
+                f"can be numerical noise{'' if opt else '; geometry not optimised here'})\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
     if solvent:
         ws = mf.with_solvent
@@ -612,7 +625,9 @@ if __name__ == "__main__":
     c.add_argument("--rerank", type=int, default=0, metavar="N",
                    help="DFT single points on the N lowest distinct MMFF conformers, continue with the lowest (PAM3: ~2 min each in gas phase)")
     c.add_argument("--orbitals", action="store_true", help="also write HOMO/LUMO cubes + energies; render then draws homo/lumo.png")
-    c.add_argument("--opt-conv", choices=sorted(OPT_CONV), default="gau",
+    c.add_argument("--freq", action="store_true",
+                   help="harmonic frequencies after the SCF/--opt; 0 imaginary = minimum (analytic Hessian: slow, hours for PAM3)")
+    c.add_argument("--opt-conv",choices=sorted(OPT_CONV), default="gau",
                    help="--opt convergence: gau (geomeTRIC default) or qchem (gradient AND energy-or-displacement; for floppy chains)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
@@ -632,7 +647,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
