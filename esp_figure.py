@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--rerank 5] [--orbitals] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--rerank 5] [--orbitals] [--charges mk|chelpg] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
 
@@ -30,6 +30,11 @@ ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not 
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
+# ESP-fitted charges (--charges): Merz-Singh-Kollman radii (Å) on 4 shells, and Breneman-Wiberg CHelpG radii (Å) on a grid
+MK_RADII = {"H": 1.20, "C": 1.50, "N": 1.50, "O": 1.40, "F": 1.35, "P": 1.80, "S": 1.75, "Cl": 1.70}
+MK_SHELLS, MK_DENSITY = (1.4, 1.6, 1.8, 2.0), 5          # radius multiples; points per Å²
+CHELPG_RADII = {"H": 1.45, "C": 1.50, "N": 1.70, "O": 1.70}   # other elements 2.0
+CHELPG_STEP, CHELPG_SHELL = 0.3, 2.8                       # Å grid spacing; Å beyond the radius spheres
 SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
 # H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
 # Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
@@ -144,6 +149,61 @@ def esp_extrema(surf, sym, xyz):
     return out
 
 
+def esp_at(mol, dm, pts):
+    """ESP (a.u.) of nuclei + electrons at points (bohr). Nuclear charges are mol.atom_charges() (effective with an ECP)."""
+    from pyscf import gto, df
+    V = np.zeros(len(pts))
+    for i in range(0, len(pts), 1500):   # chunked to limit memory
+        p = pts[i:i + 1500]
+        V[i:i + 1500] = -np.einsum("ijp,ij->p", df.incore.aux_e2(mol, gto.fakemol_for_charges(p)), dm)  # electrons
+    for zc, R in zip(mol.atom_charges(), mol.atom_coords()):
+        V += zc / np.linalg.norm(pts - R, axis=1)                                                      # nuclei
+    return V
+
+
+def fit_points(scheme, sym, xyz):
+    """ESP fit points (Å) for MK or CHelpG, and the radii text for method.txt."""
+    radii, other = (MK_RADII, None) if scheme == "mk" else (CHELPG_RADII, 2.0)
+    miss = sorted(set(sym) - set(radii))
+    r = np.array([radii.get(s, 2.0) for s in sym])
+    # ponytail: MK has no published radius for e.g. Si/Br here; 2.0 Å is assumed and named in method.txt
+    note = ", ".join(f"{s} {radii[s]:.2f}" for s in radii if s in sym) + " Å" + (
+        f"; {', '.join(miss)} {other or 2.0:.2f} Å ({'CHelpG default' if other else 'assumed, not in the MK table'})" if miss else "")
+
+    def gap(p, k=1.0):   # distance from p to the nearest atom's scaled radius sphere (negative = inside)
+        g = np.full(len(p), np.inf)
+        for c, ri in zip(xyz, r):
+            g = np.minimum(g, np.linalg.norm(p - c, axis=1) - k * ri)
+        return g
+    if scheme == "mk":   # 4 shells, 5 points per Å² (Fibonacci sphere), points inside another atom's shell dropped
+        pts = []
+        for k in MK_SHELLS:
+            for c, ri in zip(xyz, r):
+                n = max(int(MK_DENSITY * 4 * np.pi * (k * ri) ** 2), 1)
+                t = np.arange(n) + 0.5
+                phi, th = np.arccos(1 - 2 * t / n), np.pi * (1 + 5 ** 0.5) * t
+                s = c + k * ri * np.c_[np.cos(th) * np.sin(phi), np.sin(th) * np.sin(phi), np.cos(phi)]
+                pts.append(s[gap(s, k) > -1e-6])
+        return np.vstack(pts), note
+    # grid centred on the box middle, so a mirror-symmetric molecule gets a mirror-symmetric point set
+    c = (xyz.min(0) + xyz.max(0)) / 2
+    half = np.ceil(((xyz.max(0) - xyz.min(0)) / 2 + r.max() + CHELPG_SHELL) / CHELPG_STEP)
+    g = c + CHELPG_STEP * np.stack(np.meshgrid(*(np.arange(-h, h + 1) for h in half), indexing="ij"), -1).reshape(-1, 3)
+    d = gap(g)
+    return g[(d > 0) & (d <= CHELPG_SHELL)], note
+
+
+def fit_charges(pts, V, xyz, total):
+    """Least-squares atomic charges reproducing V at pts (Å), sum constrained to total (Lagrange multiplier).
+    Returns charges and the relative RMS error sqrt(sum (V_fit - V)^2 / sum V^2)."""
+    A = B2A / np.linalg.norm(pts[:, None] - xyz[None], axis=2)   # 1/r in bohr^-1
+    n = len(xyz)
+    M = np.zeros((n + 1, n + 1))
+    M[:n, :n], M[:n, n], M[n, :n] = A.T @ A, 1, 1
+    q = np.linalg.solve(M, np.r_[A.T @ V, total])[:n]
+    return q, float(np.sqrt(((A @ q - V) ** 2).sum() / (V ** 2).sum()))
+
+
 def check_input(sym, charge, spin=0):
     """Refuse what the method can't do, before any compute: unsupported elements, open-shell (radical) molecules
     without an explicit spin, and spins that don't fit the electron count."""
@@ -228,7 +288,9 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None):
+    if charges not in (None, "mk", "chelpg"):
+        sys.exit(f"--charges must be mk or chelpg, got {charges}")
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
@@ -253,12 +315,13 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         # a recompute (for --orbitals/--freq) must not silently swap an optimised geometry for a draft one, or vice versa
         if ("optimised geometry (geomeTRIC)" in text) != opt or ("H-bond-free" in text) != no_hbond:
             sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
-        if (not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text):
+        if ((not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text)
+                and (not charges or f"atomic charges: {'MK' if charges == 'mk' else 'CHelpG'} " in text)):
             print(f"{out} already computed (use --force to redo)")
             return out
     out.mkdir(parents=True, exist_ok=True)
     import os, pyscf, rdkit
-    from pyscf import gto, dft, df
+    from pyscf import gto, dft
     from pyscf.tools import cubegen
     if not os.environ.get("PYSCF_TMPDIR"):    # scratch on disk: /tmp may be a RAM disk (7.7 GB in this WSL), and the
         pyscf.lib.param.TMPDIR = str(Path.home() / ".cache" / "esp-scratch")   # PAM3 DF Hessian needs > 9 GB of it
@@ -350,20 +413,27 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     cubegen.density(mol, str(out / "dens.cube"), dm, nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
     surf = read_cube(out / "dens.cube").contour([ISO], scalars="rho").smooth_taubin(n_iter=30).compute_normals()
     pts = surf.points / B2A
-    V = np.zeros(len(pts))
-    for i in range(0, len(pts), 1500):   # chunked to limit memory
-        p = pts[i:i + 1500]
-        V[i:i + 1500] = -np.einsum("ijp,ij->p", df.incore.aux_e2(mol, gto.fakemol_for_charges(p)), dm)  # electrons
-    for zc, R in zip(mol.atom_charges(), mol.atom_coords()):
-        V += zc / np.linalg.norm(pts - R, axis=1)                                                      # nuclei
+    V = esp_at(mol, dm, pts)
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
     orb = ""
+    (out / "charges.txt").unlink(missing_ok=True)   # method.txt is rewritten: no charges file it doesn't describe
+    if charges:   # same ESP (nuclei + density of this run) at MK / CHelpG points, fitted by constrained least squares
+        cp, note = fit_points(charges, sym, xyz)
+        q, rrms = fit_charges(cp, esp_at(mol, dm, cp / B2A), xyz, charge)
+        cname = {"mk": "MK", "chelpg": "CHelpG"}[charges]
+        how = (f"{len(MK_SHELLS)} shells at {'/'.join(map(str, MK_SHELLS))} x radius, {MK_DENSITY} points per Å²"
+               if charges == "mk" else f"{CHELPG_STEP} Å cubic grid, outside the radii and within {CHELPG_SHELL} Å of them")
+        (out / "charges.txt").write_text(f"# {cname} ESP-fitted charges (e), {level}; atom index (0-based, mol.xyz order), "
+                                         "element, charge\n" + "".join(f"{i} {s} {x:.6f}\n" for i, (s, x) in enumerate(zip(sym, q))),
+                                         encoding="utf-8")
+        orb += (f"atomic charges: {cname} (ESP fit, {how}, {len(cp)} fit points; radii {note}; sum constrained to the "
+                f"total charge, no restraints, so not RESP; charges.txt)\nESP fit RRMS: {rrms:.4f}\n")
     if orbitals:   # closed-shell RKS: HOMO = nelectron//2 - 1; same grid as the density cube
         h = mol.nelectron // 2 - 1
         for k, i in (("homo", h), ("lumo", h + 1)):
             cubegen.orbital(mol, str(out / f"{k}.cube"), mf.mo_coeff[:, i], nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
-        orb = f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
+        orb += f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
     if freq:   # analytic Hessian (incl. D3/PCM terms of mf); translations/rotations projected out, imaginary -> negative
         from pyscf.hessian import thermo
         f = np.sort(thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)["freq_wavenumber"])
@@ -684,6 +754,8 @@ if __name__ == "__main__":
                    help="harmonic frequencies after the SCF/--opt; 0 imaginary = minimum (analytic Hessian: slow, hours for PAM3)")
     c.add_argument("--opt-conv",choices=sorted(OPT_CONV), default="gau",
                    help="--opt convergence: gau (geomeTRIC default) or qchem (gradient AND energy-or-displacement; for floppy chains)")
+    c.add_argument("--charges", choices=["mk", "chelpg"],
+                   help="ESP-fitted atomic charges (MK shells or CHelpG grid, total-charge constraint) -> charges.txt")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -702,7 +774,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
