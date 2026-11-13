@@ -4,7 +4,7 @@ PASS stereo (Stereo: require or set tacticity in SMILES)
   PASS all conformers are the input isomer: 50/50 match
   PASS syndiotactic (amide sides alternate along the zigzag): sides [1, -1, 1]
 PASS guards (Guards with clear errors)
-  PASS guard [CH3]: exit 1; 'odd number of electrons (radical / open-shell): only closed-shell RKS is supported; check the charge, or add the missing H'
+  PASS guard [CH3]: exit 1; 'odd number of electrons (radical / open-shell): give --spin (N_alpha - N_beta, e.g. 1 for a doublet) to use UKS; or check the charge, or add the missing H'
   PASS guard [Pd]: exit 1; 'unsupported element(s) Pd: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si'
   PASS guard CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O: exit 1; 'unspecified stereo (stereocentre at atom 1, stereocentre at atom 6, stereocentre at atom 11): write @/@@ or /\\ into the SMILES, e.g. syndiotactic PAM3 C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O'
 PASS d3 (D3(BJ) dispersion)
@@ -23,7 +23,7 @@ PASS solvent (Implicit solvent --solvent water)
 PASS restart (Restart / checkpoint for --opt)
   PASS killed mid-optimisation after 3 steps: 3 frames, killed=True
   PASS same final energy: -169.88541843 vs -169.88541847
-  PASS fewer steps when resumed: 6 vs 7
+  PASS fewer steps when resumed: 5 vs 7
 PASS rerank (DFT re-ranking of top MMFF conformers)
   PASS 5 distinct DFT energies in method.txt: [-782.4792142, -782.47573824, -782.47637189, -782.47115459, -782.4733707]
   PASS chosen = lowest: final -782.47921420, lowest -782.4792142
@@ -31,19 +31,34 @@ PASS colours (Full element colour table)
   PASS P/Si/Br/I coloured, not pink: {'P': '#ff8000', 'Si': '#f0c8a0', 'Br': '#a62929', 'I': '#940094'}
   PASS H/C/N/O/S/Cl unchanged: {'H': '#f2f2f2', 'C': '#7f7f7f', 'N': '#1f3fff', 'O': '#ff1f1f', 'S': '#e6c619', 'Cl': '#1fd01f'}
   PASS render uses COLORS: 172191 green px, 0 pink px
-SKIP freq (Frequency check, confirm minimum)
-  SKIP: calc() has no 'freq' argument yet
-SKIP orbitals (HOMO/LUMO surfaces)
-  SKIP: calc() has no 'orbitals' argument yet
+PASS freq (Frequency check, confirm minimum)
+  PASS water: 3 modes within 5 cm-1: [1710.9, 3721.1, 3844.8] vs [1710.7, 3720.5, 3844.3]
+  PASS water: 0 imaginary: 0
+  PASS planar NH3: exactly 1 imaginary: 1; [-898.6, 1601.1, 1601.1, 3651.7, 3850.2, 3850.4]
+PASS orbitals (HOMO/LUMO surfaces)
+  PASS HOMO < LUMO: -7.895 / 1.774 eV
+  PASS energies match direct PySCF: -7.895/1.774 vs -7.895/1.774 eV
+  PASS HOMO is the O lone pair (>= 70 % nearer O): 85%
+  PASS homo.png and lumo.png rendered: 
 PASS extrema (ESP min/max markers on the map)
   PASS V_s,min / V_s,max equal the ESP range: -0.0678/0.0756 vs -0.0678/0.0756
   PASS min nearest the carbonyl O: atom 2 O
   PASS max nearest an N-H hydrogen: atom 3, N-H atoms [3, 4]
   PASS marked map rendered, caption names V_s,min and V_s,max: 
-SKIP bonds (H-bonds as dashed lines, double bonds as double sticks)
+PASS bonds (H-bonds as dashed lines, double bonds as double sticks)
   PASS fold: 2 H-bonds: [(25, 15), (34, 4)]
+  PASS fold: 34 bonds, 3 C=O doubles: 34 bonds, doubles [('O', 'C'), ('O', 'C'), ('O', 'C')]
   PASS ext: 1 H-bonds: [(34, 9)]
+  PASS ext: 34 bonds, 3 C=O doubles: 34 bonds, doubles [('O', 'C'), ('O', 'C'), ('O', 'C')]
   PASS render with H-bond lines runs: 
-  SKIP: H-bond half passes; bond_list (double sticks) not built yet
-SKIP uks (Open-shell UKS)
-  SKIP: calc() has no 'spin' argument yet
+PASS uks (Open-shell UKS)
+  PASS CH3 energy matches direct UKS: -39.83752120 vs -39.83752120
+  PASS <S^2> 0.75-0.77: 0.7537
+  PASS ESP surface written: 14780 points
+  PASS ESP from the total density (min < 0 < max, both within 0.05 a.u.): -0.0155 to 0.0194
+  PASS [CH3] without spin still refused: number of electrons (radical / open-shell): give --spin (N_alpha - N_beta, e.g. 1 for a doublet) to use UKS; or check the charge, or add the missing H
+PASS optconv (Optimisation convergence --opt-conv qchem)
+  PASS default run names its rule (gau): gau (geomeTRIC default, Gaussian-like: energy 1e-6 Eh, gradient rms/max 3e-4/4.5e-4, displacement rms/max 1.2e-3/1.8e-3, all five)
+  PASS qchem run names its rule: qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)
+  PASS qchem takes no more steps: 7 vs 7
+  PASS same minimum within 1e-5 Eh: -169.88541847 vs -169.88541847
