@@ -62,3 +62,41 @@ PASS optconv (Optimisation convergence --opt-conv qchem)
   PASS qchem run names its rule: qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)
   PASS qchem takes no more steps: 7 vs 7
   PASS same minimum within 1e-5 Eh: -169.88541847 vs -169.88541847
+PASS charges (MK/CHelpG charges)
+  PASS water_mk: one charge per atom, mol.xyz order: ['O', 'H', 'H'] vs ['O', 'H', 'H']
+  PASS water_mk: method.txt names the scheme: 
+  PASS water_mk: ESP fit RRMS < 0.15: 0.1180
+  PASS water_mk: sum q = total charge (1e-4): -1.00e-06
+  PASS water MK: q(O) -0.95..-0.70: -0.7534
+  PASS water MK: q(H1) = q(H2) within 0.01: 0.3767 / 0.3768
+  PASS formamide_mk: one charge per atom, mol.xyz order: ['N', 'C', 'O', 'H', 'H', 'H'] vs ['N', 'C', 'O', 'H', 'H', 'H']
+  PASS formamide_mk: method.txt names the scheme: 
+  PASS formamide_mk: ESP fit RRMS < 0.15: 0.0669
+  PASS formamide_mk: sum q = total charge (1e-4): 5.90e-17
+  PASS formamide MK: surface ESP RMS < 0.8 x Mulliken's: MK 0.0042 vs Mulliken 0.0065 a.u.
+  PASS formamide MK: q(O) < 0, q(N) < 0, q(C) > 0: O -0.492, N -0.832, C 0.539
+  PASS water_chelpg: one charge per atom, mol.xyz order: ['O', 'H', 'H'] vs ['O', 'H', 'H']
+  PASS water_chelpg: method.txt names the scheme: 
+  PASS water_chelpg: ESP fit RRMS < 0.15: 0.1114
+  PASS water_chelpg: sum q = total charge (1e-4): 0.00e+00
+  PASS water CHelpG: q(H1) = q(H2) within 0.01: 0.3747 / 0.3747
+  PASS water CHelpG: q(O) within 0.1 e of MK: -0.7493 vs MK -0.7534
+PASS nci (RDG/NCI plots, own code, checked against Multiwfn)
+  PASS method.txt has an NCI line: 
+  PASS rdg.cube matches direct evaluation (1 %): max rel. dev. 5.67e-05
+  PASS sl2rho.cube matches direct evaluation (1e-3 relative): max rel. dev. 1.05e-04
+  PASS dimer: attractive lobe on H...O (min sl2rho < -0.015): -0.0252696
+  PASS nci.png rendered: 
+  PASS isolated water: no off-atom NCI points: 0 points
+  PASS PAM3 fold: every H-bond has an attractive lobe (< -0.01 below 2.3 A, else < -0.005): H26...O16 2.50 A: -0.00782118, H35...O5 2.14 A: -0.016628
+PASS fukui (Fukui functions)
+  PASS one row per atom, mol.xyz order: ['C', 'O', 'H', 'H'] vs ['C', 'O', 'H', 'H']
+  PASS f+ and f- each sum to 1 (+-0.02): [1. 1.]
+  PASS values match direct PySCF (0.01): max dev. 0.0000
+  PASS formaldehyde: f+ on C and O each above every H: f+ [('C', np.float64(0.278)), ('O', np.float64(0.274)), ('H', np.float64(0.224)), ('H', np.float64(0.224))]
+  PASS formaldehyde: f- largest on O: f- {'C': np.float64(0.065), 'O': np.float64(0.434), 'H': np.float64(0.25)}
+  PASS method.txt flags f+ as basis-limited: 
+  PASS formamide: f- largest on O or N: f- [('N', np.float64(0.259)), ('C', np.float64(0.044)), ('O', np.float64(0.29)), ('H', np.float64(0.13)), ('H', np.float64(0.117)), ('H', np.float64(0.16))]
+  PASS fukui with spin > 0 refused: --fukui needs a closed-shell molecule (--spin 0): N+1 and N-1 are then doublets
+SKIP def2 (Basic def2 + ECP support for heavy elements)
+  SKIP: esp_figure has no HEAVY_BASIS yet

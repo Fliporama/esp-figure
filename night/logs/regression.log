@@ -1,0 +1,34 @@
+input: O
+name: water
+charge: 0
+atoms: 3
+geometry: lowest-energy of 50 conformers, RDKit ETKDG + MMFF94 (draft)
+intramolecular H-bonds in final geometry (H···N/O < 2.5 Å): 0
+level of theory: B3LYP/6-31G(d), density fitting (PySCF default auxiliary basis); ESP integrals exact
+SCF energy: -76.40704344 Eh (converged: True)
+surface: electron density isosurface rho = 0.001 a.u. (grid 100^3, margin 6.0 bohr), 12710 vertices
+ESP range on surface: -0.0630 to 0.0695 a.u.
+software: PySCF 2.15.0, RDKit 2026.09.1, NumPy 2.5.4
+wall time: 6 s
+caption: Electrostatic potential mapped onto the 0.001 a.u. electron-density isosurface, computed at the B3LYP/6-31G(d) level with PySCF 2.15.0 (lowest-energy of 50 conformers, RDKit ETKDG + MMFF94 (draft)).
+
+wrote PNGs to /tmp/tmp6_eonf_e/water
+ok
+input: /mnt/c/dev/esp-night/night/baseline/pam3_opt.xyz
+name: pam3_sp
+charge: 0
+atoms: 35
+geometry: geometry read from pam3_opt.xyz
+intramolecular H-bonds in final geometry (H···N/O < 2.5 Å): n/a
+level of theory: B3LYP/6-31G(d), density fitting (PySCF default auxiliary basis); ESP integrals exact
+SCF energy: -782.48653680 Eh (converged: True)
+surface: electron density isosurface rho = 0.001 a.u. (grid 100^3, margin 6.0 bohr), 24140 vertices
+ESP range on surface: -0.0663 to 0.0780 a.u.
+software: PySCF 2.15.0, RDKit 2026.09.1, NumPy 2.5.4
+wall time: 147 s
+caption: Electrostatic potential mapped onto the 0.001 a.u. electron-density isosurface, computed at the B3LYP/6-31G(d) level with PySCF 2.15.0 (geometry read from pam3_opt.xyz).
+
+PASS water_test: True (expected True ± None)
+PASS pam3_sp.scf_energy: -782.4865368 (expected -782.4865368 ± 1e-06)
+PASS pam3_sp.esp_min: -0.0663 (expected -0.0663 ± 0.0001)
+PASS pam3_sp.esp_max: 0.078 (expected 0.078 ± 0.0001)

@@ -55,6 +55,8 @@
     direct PySCF PCM runs. Unconverged ion SCF exits (nothing cached); <S^2> > 10 % off is flagged. Refused with --spin.
     `scf()` now picks UKS/RKS from `mol.spin` (same choice as before for every caller; `test_uks.py` passes).
   - No queue jobs: STATE asked to keep the queue free of PAM3 jobs tonight (ext freq outside the queue).
+  - Phase 3 review: regression 4/4 pass; sanity `charges`, `nci`, `fukui` pass (all earlier entries pass, `def2` skips).
+    Roadmap ticks for the three stand. `nci.png` still unviewed; Multiwfn check still open.
 
 ## Skipped (waiting on you)
 - (none)
