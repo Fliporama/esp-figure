@@ -35,6 +35,7 @@ MK_RADII = {"H": 1.20, "C": 1.50, "N": 1.50, "O": 1.40, "F": 1.35, "P": 1.80, "S
 MK_SHELLS, MK_DENSITY = (1.4, 1.6, 1.8, 2.0), 5          # radius multiples; points per Å²
 CHELPG_RADII = {"H": 1.45, "C": 1.50, "N": 1.70, "O": 1.70}   # other elements 2.0
 CHELPG_STEP, CHELPG_SHELL = 0.3, 2.8                       # Å grid spacing; Å beyond the radius spheres
+NCI_S, NCI_RHO, NCI_LIM = 0.5, 0.05, 0.04   # --nci picture: RDG isovalue, density cutoff, sign(lambda2) rho colour limit (a.u.)
 SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
 # H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
 # Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
@@ -288,7 +289,7 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False):
     if charges not in (None, "mk", "chelpg"):
         sys.exit(f"--charges must be mk or chelpg, got {charges}")
     out = Path(root) / name
@@ -316,7 +317,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         if ("optimised geometry (geomeTRIC)" in text) != opt or ("H-bond-free" in text) != no_hbond:
             sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
         if ((not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text)
-                and (not charges or f"atomic charges: {'MK' if charges == 'mk' else 'CHelpG'} " in text)):
+                and (not charges or f"atomic charges: {'MK' if charges == 'mk' else 'CHelpG'} " in text)
+                and (not nci or ("\nNCI: " in text and (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists()))):
             print(f"{out} already computed (use --force to redo)")
             return out
     out.mkdir(parents=True, exist_ok=True)
@@ -412,11 +414,37 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     # Surface: isosurface of the density. ESP only at its vertices (full-grid ESP is >10x slower).
     cubegen.density(mol, str(out / "dens.cube"), dm, nx=GRID, ny=GRID, nz=GRID, margin=MARGIN)
     surf = read_cube(out / "dens.cube").contour([ISO], scalars="rho").smooth_taubin(n_iter=30).compute_normals()
+    for k in ("rdg", "sl2rho"):   # method.txt is rewritten: no NCI cubes it doesn't describe (render draws nci.png from them)
+        (out / f"{k}.cube").unlink(missing_ok=True)
+    nci_line = ""
+    if nci:   # Johnson et al. 2010 NCI index, on the dens.cube grid, from analytic AO 1st/2nd derivatives
+        from pyscf.dft import numint
+        cube = cubegen.Cube(mol, GRID, GRID, GRID, margin=MARGIN)
+        c = cube.get_coords()
+        S, L = np.empty(len(c)), np.empty(len(c))
+        pairs = {(0, 0): 4, (0, 1): 5, (0, 2): 6, (1, 1): 7, (1, 2): 8, (2, 2): 9}   # eval_ao order: xx xy xz yy yz zz
+        for i in range(0, len(c), 4000):
+            ao = numint.eval_ao(mol, c[i:i + 4000], deriv=2)
+            d = [a @ dm for a in ao[:4]]
+            rho = np.einsum("pi,pi->p", d[0], ao[0])
+            g = 2 * np.einsum("pi,xpi->xp", d[0], ao[1:4])
+            H = np.empty((len(rho), 3, 3))
+            for (a, b), k in pairs.items():
+                H[:, a, b] = H[:, b, a] = 2 * (np.einsum("pi,pi->p", d[0], ao[k]) + np.einsum("pi,pi->p", d[1 + a], ao[1 + b]))
+            # s capped at 100 where rho -> 0 (only s < 0.5 matters)
+            S[i:i + 4000] = np.minimum(np.linalg.norm(g, axis=0) / (2 * (3 * np.pi ** 2) ** (1 / 3) * np.maximum(rho, 1e-30) ** (4 / 3)), 100)
+            L[i:i + 4000] = np.sign(np.linalg.eigvalsh(H)[:, 1]) * rho
+        cube.write(S.reshape(cube.nx, cube.ny, cube.nz), str(out / "rdg.cube"), comment="reduced density gradient s")
+        cube.write(L.reshape(cube.nx, cube.ny, cube.nz), str(out / "sl2rho.cube"), comment="sign(lambda2) rho (a.u.)")
+        nci_line = (f"NCI: rdg.cube (reduced density gradient s = |grad rho| / (2 (3 pi^2)^(1/3) rho^(4/3))) and sl2rho.cube "
+                    f"(sign(lambda2) rho, a.u.) on the density grid (spacing up to {np.diag(cube.box).max() / (GRID - 1):.2f} bohr; NCIPLOT "
+                    f"uses ~0.1, so weak lobes may look blocky), analytic AO derivatives; nci.png: s = {NCI_S} where "
+                    f"rho < {NCI_RHO} a.u., coloured by sign(lambda2) rho on +/-{NCI_LIM} a.u. (Johnson et al. 2010)\n")
     pts = surf.points / B2A
     V = esp_at(mol, dm, pts)
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
-    orb = ""
+    orb = nci_line
     (out / "charges.txt").unlink(missing_ok=True)   # method.txt is rewritten: no charges file it doesn't describe
     if charges:   # same ESP (nuclei + density of this run) at MK / CHelpG points, fitted by constrained least squares
         cp, note = fit_points(charges, sym, xyz)
@@ -588,6 +616,7 @@ def panel(names, labels=None, style="rainbow", out="runs/panel.png", root="runs"
 
 def render(name, style="both", limit=None, view=None, root="runs", extrema=False, hbond_lines=False):
     import pyvista as pv
+    from matplotlib.colors import LinearSegmentedColormap
     out = Path(root) / name
     sym, xyz = read_xyz(out / "mol.xyz")
     surf = pv.read(out / "surf.vtk")
@@ -719,6 +748,28 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         notes.append(f"{k}.png: {k.upper()} isosurfaces at +/-{ORB_ISO} a.u. (orbital value); colours show the phase "
                      f"(green +, purple -), not ESP sign; "
                      f"default view tilted ~30 deg from the ESP view")
+    if (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists():
+        g = read_cube(out / "rdg.cube")
+        g.point_data["sl2rho"] = read_cube(out / "sl2rho.cube")["rho"]
+        g.point_data["absl"] = abs(g["sl2rho"])
+        # s = 0.5 everywhere, then keep only the weak-density part (rho < 0.05): drops the shells around nuclei/bonds
+        lobe = g.contour([NCI_S], scalars="rho").clip_scalar(scalars="absl", value=NCI_RHO)
+        nmap = LinearSegmentedColormap.from_list("nci", ["#0000ff", "#00c000", "#ff0000"])
+
+        def nci_surface(p):
+            if lobe.n_points:
+                p.add_mesh(lobe.extract_surface(algorithm="dataset_surface").smooth_taubin(n_iter=20).compute_normals(),
+                           scalars="sl2rho", cmap=nmap, clim=(-NCI_LIM, NCI_LIM), smooth_shading=True, specular=0.3,
+                           scalar_bar_args=dict(title="sign(lambda2)*rho (a.u.)\n", fmt="%.3f", n_labels=5, color="black",
+                                                vertical=True, position_x=0.88, position_y=0.2, width=0.05, height=0.6,
+                                                title_font_size=28, label_font_size=24))
+            else:
+                p.add_text("no NCI surface (s = 0.5, rho < 0.05 a.u.)", position="upper_left", font_size=16, color="black")
+        shoot(out / "nci.png", nci_surface)
+        notes.append(f"nci.png: NCI isosurface, reduced density gradient s = {NCI_S} where rho < {NCI_RHO} a.u., coloured by "
+                     f"sign(lambda2) rho from -{NCI_LIM} (blue, attractive, e.g. H-bonds) via 0 (green, weak van der Waals) "
+                     f"to +{NCI_LIM} a.u. (red, steric repulsion), interpolated across the surface; these colours are not "
+                     f"ESP (blue = negative here, unlike the ESP maps)" + ("" if lobe.n_points else "; no NCI surface found"))
     for e in ex:
         notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}): "
                      f"{e['value']:+.4f} a.u., nearest atom {e['atom']}; "
@@ -756,6 +807,8 @@ if __name__ == "__main__":
                    help="--opt convergence: gau (geomeTRIC default) or qchem (gradient AND energy-or-displacement; for floppy chains)")
     c.add_argument("--charges", choices=["mk", "chelpg"],
                    help="ESP-fitted atomic charges (MK shells or CHelpG grid, total-charge constraint) -> charges.txt")
+    c.add_argument("--nci", action="store_true",
+                   help="RDG / sign(lambda2) rho cubes for NCI analysis; render then draws nci.png (PAM3: tens of minutes)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -774,7 +827,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
