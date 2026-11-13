@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ESP figures in two stages: `calc` does the chemistry once, `render` makes PNGs in seconds.
 
-  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--rerank 5] [--orbitals] [--charges mk|chelpg] [--force]
+  python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--rerank 5] [--orbitals] [--charges mk|chelpg] [--nci] [--fukui] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
   python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
 
@@ -289,9 +289,11 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False):
     if charges not in (None, "mk", "chelpg"):
         sys.exit(f"--charges must be mk or chelpg, got {charges}")
+    if fukui and spin:   # ponytail: N+-1 of a radical would be singlet or triplet; not decided, so refused
+        sys.exit("--fukui needs a closed-shell molecule (--spin 0): N+1 and N-1 are then doublets")
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
@@ -318,7 +320,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
         if ((not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text)
                 and (not charges or f"atomic charges: {'MK' if charges == 'mk' else 'CHelpG'} " in text)
-                and (not nci or ("\nNCI: " in text and (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists()))):
+                and (not nci or ("\nNCI: " in text and (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists()))
+                and (not fukui or ("\nFukui: " in text and (out / "fukui.txt").exists()))):
             print(f"{out} already computed (use --force to redo)")
             return out
     out.mkdir(parents=True, exist_ok=True)
@@ -352,11 +355,11 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         xyz = np.array([r.split()[1:4] for r in last[2:]], float)
         geo = f"{geo}; {'continued from step' if log.exists() else 'restarted from step'} {done} of " \
               f"{'a finished' if log.exists() else 'an interrupted'} optimisation"
-    build = lambda x: gto.M(atom=[(s, tuple(map(float, r))) for s, r in zip(sym, x)], charge=charge, spin=spin, basis="6-31g*",
-                         verbose=0)
+    build = lambda x, q=charge, s=spin: gto.M(atom=[(a, tuple(map(float, r))) for a, r in zip(sym, x)], charge=q, spin=s,
+                                              basis="6-31g*", verbose=0)
 
     def scf(mol):
-        mf = (dft.UKS if spin else dft.RKS)(mol).density_fit()
+        mf = (dft.UKS if mol.spin else dft.RKS)(mol).density_fit()
         mf.xc = "b3lyp"
         if d3:
             mf.disp = "d3bj"   # pip install pyscf-dispersion; post-SCF energy term, density and ESP unchanged
@@ -457,6 +460,27 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                                          encoding="utf-8")
         orb += (f"atomic charges: {cname} (ESP fit, {how}, {len(cp)} fit points; radii {note}; sum constrained to the "
                 f"total charge, no restraints, so not RESP; charges.txt)\nESP fit RRMS: {rrms:.4f}\n")
+    (out / "fukui.txt").unlink(missing_ok=True)
+    if fukui:   # vertical N+1 / N-1 doublets at this geometry, same level; condensed with Mulliken populations
+        q0, qi, s2 = mf.mulliken_pop(verbose=0)[1], {}, {}
+        for dq, k in ((-1, "N+1"), (1, "N-1")):   # charge -1 = N+1 electrons (anion); keep only populations, not the SCF
+            f = scf(build(xyz, charge + dq, 1))
+            if not f.converged:   # exit before method.txt: the run is not cached, a rerun recomputes
+                sys.exit(f"--fukui: the {k} (charge {charge + dq}) UKS SCF did not converge; no Fukui values written")
+            qi[k], s2[k] = f.mulliken_pop(verbose=0)[1], f.spin_square()[0]
+        fp, fm = q0 - qi["N+1"], qi["N-1"] - q0   # p = Z - q
+        (out / "fukui.txt").write_text(f"# condensed Fukui functions (Mulliken), {level}; atom index (0-based, mol.xyz order), "
+                                       "element, f+ (nucleophilic attack), f- (electrophilic attack); Mulliken-condensed "
+                                       "values can be slightly negative (basis artefact), rank sites by the large ones\n" +
+                                       "".join(f"{i} {s} {a:.6f} {b:.6f}\n" for i, (s, a, b) in enumerate(zip(sym, fp, fm))),
+                                       encoding="utf-8")
+        cont = [k for k in s2 if abs(s2[k] - 0.75) > 0.075]
+        if cont:
+            print(f"WARNING: Fukui {' and '.join(cont)} <S^2> off by > 10 %: spin contamination", file=sys.stderr)
+        orb += (f"Fukui: f+ = p(N+1) - p(N), f- = p(N) - p(N-1), Mulliken-condensed; N+-1 as UKS doublets at this geometry "
+                f"(vertical, same level), <S^2> {s2['N+1']:.4f} (N+1) / {s2['N-1']:.4f} (N-1), pure doublet 0.7500"
+                f"{'; WARNING: spin contamination > 10 % in ' + ' and '.join(cont) if cont else ''}; f+ is basis-limited "
+                f"(6-31G(d) has no diffuse functions, so the anion's extra electron is squeezed onto the molecule); fukui.txt\n")
     if orbitals:   # closed-shell RKS: HOMO = nelectron//2 - 1; same grid as the density cube
         h = mol.nelectron // 2 - 1
         for k, i in (("homo", h), ("lumo", h + 1)):
@@ -809,6 +833,8 @@ if __name__ == "__main__":
                    help="ESP-fitted atomic charges (MK shells or CHelpG grid, total-charge constraint) -> charges.txt")
     c.add_argument("--nci", action="store_true",
                    help="RDG / sign(lambda2) rho cubes for NCI analysis; render then draws nci.png (PAM3: tens of minutes)")
+    c.add_argument("--fukui", action="store_true",
+                   help="condensed Fukui f+/f- (Mulliken) from UKS N+1/N-1 at the final geometry -> fukui.txt (closed shell only; two extra SCFs)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -827,7 +853,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
