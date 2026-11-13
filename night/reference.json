@@ -19,6 +19,10 @@
   "extrema":  {"script": "night/sanity/extrema.py",  "item": "ESP min/max markers on the map", "timeout": 600},
   "bonds":    {"script": "night/sanity/bonds.py",    "item": "H-bonds as dashed lines, double bonds as double sticks", "timeout": 300},
   "uks":      {"script": "night/sanity/uks.py",      "item": "Open-shell UKS", "timeout": 900},
-  "optconv":  {"script": "night/sanity/optconv.py",  "item": "Optimisation convergence --opt-conv qchem", "timeout": 1200}
+  "optconv":  {"script": "night/sanity/optconv.py",  "item": "Optimisation convergence --opt-conv qchem", "timeout": 1200},
+  "charges":  {"script": "night/sanity/charges.py",  "item": "MK/CHelpG charges", "timeout": 900},
+  "nci":      {"script": "night/sanity/nci.py",      "item": "RDG/NCI plots, own code, checked against Multiwfn", "timeout": 3600},
+  "fukui":    {"script": "night/sanity/fukui.py",    "item": "Fukui functions", "timeout": 1200},
+  "def2":     {"script": "night/sanity/def2.py",     "item": "Basic def2 + ECP support for heavy elements", "timeout": 900}
  }
 }

@@ -20,4 +20,11 @@ Offscreen rendering works without a display (a harmless
 `bad X server connection` warning may print).
 
 Optional, for `--d3`: `pip install pyscf-dispersion`; `--opt` needs `geometric`.
+
+If `/tmp` is a small tmpfs (`df -h /tmp`; WSL often makes it RAM-backed), point PySCF's scratch at
+the disk, or `--freq` on PAM3 dies with "No space left on device" (> 9 GB scratch):
+
+```bash
+echo "TMPDIR = '/var/tmp'" > ~/.pyscf_conf.py
+```
 The current laptop differs (root-only WSL, venv at `/root/esp-venv`): see CLAUDE.md "This machine".

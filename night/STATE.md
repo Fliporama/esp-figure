@@ -39,23 +39,17 @@
   - Phase 3 review failed (network, 02:12); review done in the day session 2026-11-13: regression + all sanity + tests pass, merged.
 
 ## Skipped (waiting on you)
-- Week 3 (MK charges, RDG/NCI, Fukui, def2+ECP): not built. `docs/week3-sanity-draft.md` is still an unapproved
-  draft with no `sanity` entries in `reference.json`, and its four decisions are unanswered. Questions and my
-  recommendation (same as the draft's proposals):
-  1. MK only, or MK + CHelpG? Recommend MK only (CHelpG later = same fit, other points).
-  2. NCI: own code checked once against Multiwfn, or Multiwfn only? Recommend own code.
-  3. Fukui: UKS now exists (`--spin`, .xyz only). But N±1 runs from a SMILES geometry need the spin from
-     `.xyz` or an internal call; is calling UKS internally at the fixed geometry OK? Recommend yes.
-  4. def2: def2-SVP everywhere for heavy-element inputs, or mixed? Recommend def2-SVP everywhere.
-  Approve the draft (and lock the sanity scripts) to unblock.
+- (none)
 
 ## Next
-- Decide on PAM3 frequency jobs. Suggested lines once you agree (6 h cap; timing untested, may not fit):
-  `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_freq --d3 --solvent water --freq` (an `.xyz` single point:
-  the caption will say "geometry not optimised here", which is the known `.xyz` caption issue in
-  IMPROVEMENTS.md). The ext geometry stopped at step 58 (displacement not converged): expect small imaginary
-  torsion modes; decide whether to finish its optimisation first (`--opt-conv qchem`).
-- Answer the week-3 questions above.
+- **Week 3: build** MK/CHelpG charges, RDG/NCI, Fukui, def2 + ECP (mixed basis). Decisions under Answers
+  (2026-11-13); sanity scripts locked 2026-11-13 (`night/sanity/{charges,nci,fukui,def2}.py`, listed in
+  `reference.json`); the docstrings are the contracts, `docs/week3-sanity.md` explains the limits.
+  Suggested order: charges, def2, fukui, nci (nci's sanity takes ~40 min: the PAM3 cube).
+- PAM3 frequencies (day session 2026-11-13, running/done outside the queue): `pam3s_fold_freq`
+  (.xyz single point of the fold geometry), then the ext optimisation finished from step 58 with
+  `--opt-conv qchem`. PySCF scratch moved to /var/tmp (`/root/.pyscf_conf.py`): /tmp is a 7.7 GB tmpfs and the
+  first fold run died there. Do not queue these again; an ext `--freq` job waits for the ext result.
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->
@@ -77,3 +71,9 @@
   would likely pick a folded shape again.)
 - Redo status (user, 2026-11-12): DONE in the day session (see Done). The two lines above are history:
   never queue `pam3s_fold` or `pam3s_ext` again unless a new Answer says so.
+- Week 3 (user, 2026-11-13):
+  1. Charges: MK + CHelpG (`--charges mk|chelpg`), same fit code, different point selection.
+  2. NCI: own code; checked once against Multiwfn on the water dimer in a day session (Multiwfn download approved).
+  3. Fukui: OK to call UKS internally for N+1 / N-1 at the fixed neutral geometry, also from SMILES input.
+     Mulliken-difference condensation; method.txt flags f+ as basis-limited (6-31G(d), no diffuse functions).
+  4. def2: build it, MIXED basis: 6-31G(d) on H-Kr, def2-SVP + def2 ECP only on Z > 36; caption names both.
