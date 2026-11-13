@@ -75,11 +75,37 @@ function Write-FallbackReport([string]$Path, [string]$Summary, [string]$Body, [b
     else { Write-Utf8 $Path ($Summary + "`n`n" + $Body) }
 }
 
-function Invoke-Push([string]$RepoDir, [string]$Remote, [string]$Branch, [int]$TimeoutSec = 300) {
+function Invoke-Push([string]$RepoDir, [string]$Remote, [string]$Branch, [int]$TimeoutSec = 120, [int]$Tries = 3, [int]$WaitSec = 120) {
+    # Retries: Wi-Fi drops are often short, and an unpushed night blocks the next one (worktree still there).
     $env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
-    $r = Invoke-Capped -FilePath git -ArgumentList @('push', '-u', $Remote, $Branch) -WorkingDirectory $RepoDir -TimeoutSec $TimeoutSec `
-        -LogPath (Join-Path $env:TEMP 'night-push.log')
-    [pscustomobject]@{ Ok = (-not $r.TimedOut -and $r.ExitCode -eq 0); Result = $r }
+    for ($i = 1; $i -le $Tries; $i++) {
+        $r = Invoke-Capped -FilePath git -ArgumentList @('push', '-u', $Remote, $Branch) -WorkingDirectory $RepoDir -TimeoutSec $TimeoutSec `
+            -LogPath (Join-Path $env:TEMP 'night-push.log')
+        if (-not $r.TimedOut -and $r.ExitCode -eq 0) { break }
+        if ($i -lt $Tries) { Start-Sleep $WaitSec }
+    }
+    [pscustomobject]@{ Ok = (-not $r.TimedOut -and $r.ExitCode -eq 0); Result = $r; Tries = [Math]::Min($i, $Tries) }
+}
+
+$NightPaths = @('night/logs', 'night/figures', 'NIGHT_REPORT.md', 'night/check_result.json', 'night/sanity_result.json')
+
+function Save-NightWork([string]$Worktree, [string]$Message) {
+    # Commit only the runner's own outputs. A Claude phase cut off mid-edit (API lost) leaves half-written code:
+    # never commit that under the runner's message. List it in the report instead, and leave it uncommitted.
+    $left = @(& git -C $Worktree status --porcelain --untracked-files=all | Where-Object {
+        $p = $_.Substring(3).Trim('"'); -not ($NightPaths | Where-Object { $p -eq $_ -or $p.StartsWith("$_/") }) })
+    if ($left.Count) {
+        $note = "`n`n## Uncommitted changes left in the worktree (note added by night.ps1)`n`n" +
+            'A Claude phase stopped without committing these (cut off mid-edit?). They are NOT on the branch; ' +
+            "inspect them in the worktree before merging.`n`n" + '```' + "`n" + ($left -join "`n") + "`n" + '```' + "`n"
+        $rep = Join-Path $Worktree 'NIGHT_REPORT.md'
+        $old = if (Test-Path $rep) { [IO.File]::ReadAllText($rep) } else { '' }
+        Write-Utf8 $rep ($old + $note)
+    }
+    $paths = @($NightPaths | Where-Object { Test-Path (Join-Path $Worktree $_) })
+    if ($paths.Count) { & git -C $Worktree add -A -- @paths }
+    & git -C $Worktree commit -q -m $Message | Out-Null   # no 2>&1: PS 5.1 + 'Stop' throws on native stderr
+    $left
 }
 
 function Get-StopTime([string]$StopBy, [datetime]$Now) {

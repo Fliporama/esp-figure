@@ -8,7 +8,8 @@ Nobody will answer questions. Work through the roadmap carefully; it's fine to d
    **Roadmap** section of `IMPROVEMENTS.md`, then `CLAUDE.md`.
 
 ## Loop: at most 3 items
-Take the first unchecked roadmap item not already in STATE "Done".
+Take the first unchecked roadmap item not already in STATE "Done" and with no `night: <item>` commit in
+`git log --oneline` (a night cut off before updating STATE still committed the item: never build it twice).
 - If it needs a scientific decision not answered in STATE Answers, or a package
   install (`pip`/`apt`), do not build it. Add it to STATE "Skipped (waiting on
   you)" with the exact question and your recommendation, and go to the next item.

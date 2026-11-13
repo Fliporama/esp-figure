@@ -70,9 +70,26 @@ Write-FallbackReport -Path "$tmp\r.md" -Summary 'PHASE TABLE' -Body 'LOGS' -Phas
 $t = Get-Content "$tmp\r.md" -Raw -Encoding UTF8
 Assert ($t -match 'LOGS' -and $t -notmatch 'agent report') 'replaced when phase 3 failed'
 
-# Invoke-Push: fails fast and reports failure (bad remote), never hangs
-$p = Invoke-Push -RepoDir (Split-Path $PSScriptRoot) -Remote 'https://invalid.invalid/x.git' -Branch 'nope' -TimeoutSec 60
+# Invoke-Push: fails fast and reports failure (bad remote), never hangs; retries the given number of times
+$p = Invoke-Push -RepoDir (Split-Path $PSScriptRoot) -Remote 'https://invalid.invalid/x.git' -Branch 'nope' -TimeoutSec 60 -Tries 1
 Assert (-not $p.Ok) 'push to a bad remote reported as failed'
+$p = Invoke-Push -RepoDir (Split-Path $PSScriptRoot) -Remote 'https://invalid.invalid/x.git' -Branch 'nope' -TimeoutSec 60 -Tries 2 -WaitSec 1
+Assert ((-not $p.Ok) -and $p.Tries -eq 2) "failed push retried twice (tries $($p.Tries))"
+
+# Save-NightWork: commits only the runner's outputs; half-written code (phase cut off) stays uncommitted, listed in the report
+$g = "$tmp\g"; New-Item -ItemType Directory -Force "$g\night\logs" | Out-Null
+& git -C $g init -q; & git -C $g config user.email 'test@example.invalid'; & git -C $g config user.name 'test'
+Write-Utf8 "$g\code.py" "x = 1`n"; & git -C $g add code.py; & git -C $g commit -q -m init
+Write-Utf8 "$g\code.py" "x = (`n"; Write-Utf8 "$g\new.py" "y`n"
+Write-Utf8 "$g\night\logs\phase1.log" "log`n"; Write-Utf8 "$g\NIGHT_REPORT.md" "# report`n"
+$left = @(Save-NightWork $g 'night: logs')
+$files = @(& git -C $g show --name-only --format= HEAD)
+Assert (($files -contains 'night/logs/phase1.log') -and ($files -contains 'NIGHT_REPORT.md') -and -not ($files -contains 'code.py') -and -not ($files -contains 'new.py')) "only runner files committed ($files)"
+Assert ($left.Count -eq 2) "2 leftovers returned ($left)"
+Assert (((& git -C $g show HEAD:NIGHT_REPORT.md) -join "`n") -match 'code\.py') 'committed report lists the leftover code'
+Assert ((Get-Content "$g\code.py" -Raw) -match '\(') 'half-written code kept in the worktree, not reverted'
+$left = @(Save-NightWork $g 'night: again')
+Assert ($left.Count -eq 2) 'second call: nothing new to commit, no error'
 
 # Default WSL runner: a job over its cap is killed inside WSL too (no orphan python), status timeout
 Write-Utf8 "$tmp\q2.txt" "calc CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC --name slowjob --opt`n"

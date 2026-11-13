@@ -2,9 +2,9 @@
 
 The coding phase and the job queue have finished. Check, report, commit. Do not write new features.
 
-1. Run the regression checks:
-   `wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python night/check.py`
-   and read `night/check_result.json`.
+1. Read `night/check_result.json`: the script already ran the regression checks after the sanity checks
+   (log: `night/logs/regression.log`). Only if it is missing, run them yourself:
+   `wsl -d Ubuntu -u root --cd /mnt/c/dev/esp-night -e /root/esp-venv/bin/python night/check.py`.
 2. Read `night/logs/phase2.log`, and `runs/<name>/method.txt` for each queued job.
 3. Read `night/sanity_result.json` (or `night/logs/sanity.log` if it is missing: the run was cut short).
    The script ran the locked `night/sanity/` checks before the queue. Per entry: `pass`, `fail`, or `skip`

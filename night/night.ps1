@@ -45,6 +45,14 @@ try {
             '/root/esp-venv/bin/python', 'night/check.py', '--sanity') -WorkingDirectory $logs -TimeoutSec ($capS + 120) -LogPath "$logs\sanity.log" | Out-Null
     } else { Write-Utf8 "$logs\sanity.log" "sanity checks not run: no time left before the review" }
 
+    # Phase 2a': regression check (no tokens, ~3 min), here rather than in the review: if the API is gone by
+    # phase 3, check_result.json still exists. Code does not change after phase 1.
+    $capR = [Math]::Min(1200, [int]($stop.AddHours(-1) - (Get-Date)).TotalSeconds - 300)
+    if ($capR -ge 300) {
+        Invoke-Capped -FilePath wsl -ArgumentList @('-d', 'Ubuntu', '-u', 'root', '--cd', $wtWsl, '-e', 'timeout', '-k', '60', "$capR",
+            '/root/esp-venv/bin/python', 'night/check.py') -WorkingDirectory $logs -TimeoutSec ($capR + 120) -LogPath "$logs\regression.log" | Out-Null
+    } else { Write-Utf8 "$logs\regression.log" "regression check not run: no time left before the review" }
+
     # Phase 2b: compute (no tokens). Review must start by stop - 1 h.
     if ($DryRun) { Write-Utf8 "$wt\night\queue.txt" "calc O --name dry_water`n" }
     # runs/ is git-ignored, so the fresh worktree has none: copy main's runs/<name> for each queued job,
@@ -89,11 +97,11 @@ try {
             '## Phase 3 log (tail)', '```', (& $tail "$logs\phase3.log"), '```') -join "`n"
         Write-FallbackReport -Path "$wt\NIGHT_REPORT.md" -Summary $summary -Body $body -Phase3Ok (-not (& $bad $r3))
     }
-    & git -C $wt add -A
-    & git -C $wt commit -q -m "night: logs and figures ($branch)"
-    $push = Invoke-Push -RepoDir $wt -Remote origin -Branch $branch -TimeoutSec 300
-    if ($push.Ok) { Write-Host "Pushed $branch. Read NIGHT_REPORT.md on that branch." }
-    else { Write-Host "PUSH FAILED or timed out (see $env:TEMP\night-push.log.err). The work is local on $branch in $wt." }
+    $left = @(Save-NightWork $wt "night: logs and figures ($branch)")
+    if ($left.Count) { Write-Host "$($left.Count) uncommitted change(s) left in $wt (listed in NIGHT_REPORT.md)." }
+    $push = Invoke-Push -RepoDir $wt -Remote origin -Branch $branch   # up to 3 tries, ~10 min worst case
+    if ($push.Ok) { Write-Host "Pushed $branch (try $($push.Tries)). Read NIGHT_REPORT.md on that branch." }
+    else { Write-Host "PUSH FAILED after $($push.Tries) tries (see $env:TEMP\night-push.log.err). The work is local on $branch in $wt." }
 } finally {
     Clear-NoSleep
 }
