@@ -205,7 +205,7 @@ def geometry(spec, charge, no_hbond=False, top=1):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau"):
+         orbitals=False, opt_conv="gau", geo_note=""):
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
@@ -329,7 +329,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         ws = mf.with_solvent
         disp += (f"\nsolvent: implicit {solvent}, IEF-PCM eps {ws.eps} (PySCF; default vdW radii x {ws.vdw_scale}, "
                  f"Lebedev order {ws.lebedev_order}), in the SCF"
-                 f"{' and the optimisation' if opt else ' only (geometry not optimised in solvent)'}; "
+                 f"{' and the optimisation' if opt else ' only (geometry as read, see geometry line)' if spec.endswith('.xyz') else ' only (geometry not optimised in solvent)'}; "
                  "SCF energy is the total energy in solvent; mapped ESP is "
                  "nuclei + solvated electron density (PCM surface charges not included)")
 
@@ -337,7 +337,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 name: {name}
 charge: {charge}
 atoms: {len(sym)}
-geometry: {geo}{f"{chr(10)}optimisation steps: {len(steps)} (this run; trajectory in opt_traj.xyz)" if opt else ""}{f"{chr(10)}optimisation convergence: {OPT_CONV[opt_conv]}" if opt else ""}
+geometry: {geo}{f" ({geo_note})" if geo_note else ""}{f"{chr(10)}optimisation steps: {len(steps)} (this run; trajectory in opt_traj.xyz)" if opt else ""}{f"{chr(10)}optimisation convergence: {OPT_CONV[opt_conv]}" if opt else ""}
 intramolecular H-bonds in final geometry (H···N/O < {HB_CUT} Å): {hbonds(rdm, xyz) if rdm else "n/a"}
 level of theory: {level}, density fitting (PySCF default auxiliary basis); ESP integrals exact
 SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
@@ -614,6 +614,8 @@ if __name__ == "__main__":
     c.add_argument("--orbitals", action="store_true", help="also write HOMO/LUMO cubes + energies; render then draws homo/lumo.png")
     c.add_argument("--opt-conv", choices=sorted(OPT_CONV), default="gau",
                    help="--opt convergence: gau (geomeTRIC default) or qchem (gradient AND energy-or-displacement; for floppy chains)")
+    c.add_argument("--geo-note", default="", help='where the geometry came from, added to the method.txt geometry line, '
+                   'e.g. "B3LYP-D3(BJ)/6-31G(d) + PCM water optimised, runs/pam3s_ext step 58"')
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -632,7 +634,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, geo_note=a.geo_note)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:

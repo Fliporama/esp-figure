@@ -151,12 +151,13 @@ give better-documented PAM figures than the paid service.
 
 - ~~Loose convergence for floppy chains~~ done 2026-11-12: `--opt-conv qchem` (geomeTRIC `qccnv`:
   RMS gradient AND (energy OR RMS displacement); GAU_LOOSE rejected, its gradients are ~6x looser).
-  Sanity `optconv` (formamide) only shows "no worse": formamide is too stiff to show the gain.
+  Sanity `optconv` uses n-butane (gau 5 / qchem 4 steps); formamide was too stiff (7/7) and passed
+  even with `qccnv` disconnected.
 - ~~Dark seams on folded surfaces~~ fixed 2026-11-12: render draws only the surface layer nearest
   the camera (CLAUDE.md pitfall 3). A faint fringe remains where one lobe's edge overlaps another.
-- **method.txt for an `.xyz` single point** of a geometry optimised elsewhere says "geometry not
-  optimised in solvent"; let calc take a note (or detect `opt_traj.xyz` origin) so the caption
-  is right without hand-editing.
+- ~~method.txt for an `.xyz` single point~~ done 2026-11-13: in solvent it says "geometry as read,
+  see geometry line" instead of "not optimised in solvent"; `--geo-note "..."` states the origin.
+  Existing `pam3s_{fold,ext}_orb` method.txt files still need the hand fix (or a rerun).
 - ~~View choice~~ done 2026-11-12: `render --view auto` (600 directions; extrema visible, C=O and
   H-bonds side-on, few overlaps, plus a pull towards the chain-flat default). Picks the hand-chosen
   fold view; ext's pick is fine but no better than its default.
