@@ -242,9 +242,12 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             print(f"{out} already computed (use --force to redo)")
             return out
     out.mkdir(parents=True, exist_ok=True)
-    import pyscf, rdkit
+    import os, pyscf, rdkit
     from pyscf import gto, dft, df
     from pyscf.tools import cubegen
+    if not os.environ.get("PYSCF_TMPDIR"):    # scratch on disk: /tmp may be a RAM disk (7.7 GB in this WSL), and the
+        pyscf.lib.param.TMPDIR = str(Path.home() / ".cache" / "esp-scratch")   # PAM3 DF Hessian needs > 9 GB of it
+        Path(pyscf.lib.param.TMPDIR).mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
     sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank, spin=spin)
