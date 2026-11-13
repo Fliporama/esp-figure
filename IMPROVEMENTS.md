@@ -154,9 +154,10 @@ give better-documented PAM figures than the paid service.
   Sanity `optconv` (formamide) only shows "no worse": formamide is too stiff to show the gain.
 - ~~Dark seams on folded surfaces~~ fixed 2026-11-12: render draws only the surface layer nearest
   the camera (CLAUDE.md pitfall 3). A faint fringe remains where one lobe's edge overlaps another.
-- **method.txt for an `.xyz` single point** of a geometry optimised elsewhere says "geometry not
-  optimised in solvent"; let calc take a note (or detect `opt_traj.xyz` origin) so the caption
-  is right without hand-editing.
+- ~~method.txt for an `.xyz` single point~~ done 2026-11-13: a `runs/<x>/mol.xyz` input of a finished `--opt`
+  run is recognised (`xyz_origin`); the caption names run and level, and `--freq` warns when that level differs
+  (not a stationary point). Imaginary modes within `FREQ_NOISE` (50 cm-1) of zero are reported as likely noise.
+  Runs made before this (`pam3s_{fold,ext}_orb`, `pam3s_fold_freq`) keep the old line.
 - ~~View choice~~ done 2026-11-12: `render --view auto` (600 directions; extrema visible, C=O and
   H-bonds side-on, few overlaps, plus a pull towards the chain-flat default). Picks the hand-chosen
   fold view; ext's pick is fine but no better than its default.

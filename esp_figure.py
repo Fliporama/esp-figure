@@ -23,6 +23,7 @@ OPT_CONV = {  # geomeTRIC rules, recorded in method.txt
     "gau": "gau (geomeTRIC default, Gaussian-like: energy 1e-6 Eh, gradient rms/max 3e-4/4.5e-4, displacement rms/max 1.2e-3/1.8e-3, all five)",
     "qchem": "qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)",
 }
+FREQ_NOISE = 50  # cm-1; imaginary modes smaller than this are reported as likely noise (soft torsions)
 ORB_ISO = 0.02   # orbital isovalue (a.u.) for the HOMO/LUMO pictures, a common GaussView-like choice
 ORB_COLORS = ("#2e8b57", "#8e44ad")   # +/- phase: green/purple, so no one reads them as ESP red/blue
 ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not tint the atoms' element colours
@@ -47,6 +48,18 @@ def read_xyz(path):
     lines = Path(path).read_text().splitlines()
     rows = [l.split() for l in lines[2:2 + int(lines[0])]]
     return [r[0] for r in rows], np.array([r[1:4] for r in rows], float)
+
+
+def xyz_origin(spec):
+    """(run name, level of theory) if spec is the mol.xyz of a finished --opt run (method.txt next to it), else None.
+    Lets an .xyz single point say where its geometry was optimised, and at which level."""
+    p = Path(spec)
+    log = p.parent / "method.txt"
+    if p.name != "mol.xyz" or not log.exists():
+        return None
+    t = log.read_text(encoding="utf-8")
+    m = re.search(r"level of theory: (.+?), density fitting", t)
+    return (p.parent.name, m.group(1)) if m and "optimised geometry (geomeTRIC)" in t else None
 
 
 def xyz_text(sym, xyz, comment):
@@ -156,7 +169,9 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
             sys.exit("--no-hbond and --rerank need SMILES input (they pick among conformers)")
         sym, xyz = read_xyz(spec)
         check_input(sym, charge, spin)
-        return sym, xyz, charge, f"geometry read from {Path(spec).name}", None
+        src = xyz_origin(spec)
+        return sym, xyz, charge, f"geometry read from {Path(spec).name}" + (
+            f" (optimised at {src[1]} in run {src[0]})" if src else ""), None
     if spin:
         sys.exit("--spin needs .xyz input: MMFF94 has no radical atom types, so it can't build an open-shell geometry")
     from rdkit import Chem
@@ -251,6 +266,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 
     t0 = time.time()
     sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank, spin=spin)
+    src = xyz_origin(spec) if spec.endswith(".xyz") else None   # (run, level) of an optimised mol.xyz input
     # Restart: --opt appends every step to opt_traj.xyz; a rerun resumes from the last frame (after a crash: no method.txt;
     # or a finished run recomputed for --orbitals/--freq).
     traj, tag, done = out / "opt_traj.xyz", f"{spec} | {level} | charge {charge} | no-hbond {no_hbond} | rerank {rerank}", 0
@@ -351,10 +367,22 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     if freq:   # analytic Hessian (incl. D3/PCM terms of mf); translations/rotations projected out, imaginary -> negative
         from pyscf.hessian import thermo
         f = np.sort(thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)["freq_wavenumber"])
-        # ponytail: raw count, no noise cutoff; soft torsions of a loosely converged chain can give small spurious ones
+        # The count stays raw (sanity contract); small ones are split off: soft torsions of a floppy chain give a few
+        # tens of cm-1 of numerical noise (grid, loose convergence), not a saddle point.
+        small = int(((f < 0) & (f > -FREQ_NOISE)).sum())
+        if opt:
+            where = ""
+        elif src and src[1] == level:
+            where = f"; geometry optimised at this level in run {src[0]}"
+        elif src:
+            where = (f"; WARNING: geometry optimised at {src[1]} (run {src[0]}), not at this level: it is not a "
+                     f"stationary point here, so imaginary modes may be artefacts")
+        else:
+            where = "; geometry not optimised here"
         orb += (f"frequencies (cm-1): {', '.join(f'{x:.1f}' for x in f)}\nimaginary frequencies: {int((f < 0).sum())}"
-                f" (raw count of negative harmonic modes, unscaled; 0 = minimum, a few tens of cm-1 on soft torsions "
-                f"can be numerical noise{'' if opt else '; geometry not optimised here'})\n")
+                f" (raw count of negative harmonic modes, unscaled; {small} of them within {FREQ_NOISE} cm-1 of zero, "
+                f"likely numerical noise on soft torsions; {int((f <= -FREQ_NOISE).sum())} clearly imaginary; "
+                f"0 clearly imaginary = minimum{where})\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
     if spin:
         s2, ideal = mf.spin_square()[0], spin / 2 * (spin / 2 + 1)
@@ -367,7 +395,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         ws = mf.with_solvent
         disp += (f"\nsolvent: implicit {solvent}, IEF-PCM eps {ws.eps} (PySCF; default vdW radii x {ws.vdw_scale}, "
                  f"Lebedev order {ws.lebedev_order}), in the SCF"
-                 f"{' and the optimisation' if opt else ' only (geometry not optimised in solvent)'}; "
+                 f"{' and the optimisation' if opt else f' and the optimisation of run {src[0]}' if src and 'IEF-PCM' in src[1] else ' only (geometry not optimised in solvent)'}; "
                  "SCF energy is the total energy in solvent; mapped ESP is "
                  "nuclei + solvated electron density (PCM surface charges not included)")
 
