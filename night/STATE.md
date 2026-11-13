@@ -36,6 +36,7 @@
     Refused for now: `--spin` with SMILES (MMFF94 has no radical atom types), with `--orbitals` (HOMO/LUMO
     indexing is RKS-only) and with `--freq` (UKS Hessian untested).
   - No queue jobs: no PAM3 frequencies until you decide (see Next).
+  - Phase 3 review failed (network, 02:12); review done in the day session 2026-11-13: regression + all sanity + tests pass, merged.
 
 ## Skipped (waiting on you)
 - Week 3 (MK charges, RDG/NCI, Fukui, def2+ECP): not built. `docs/week3-sanity-draft.md` is still an unapproved
