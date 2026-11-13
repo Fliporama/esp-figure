@@ -160,9 +160,10 @@ extremes grow ~20–25 % (−0.089 to +0.108): use ±0.10 / ±0.05 (`--limit 0.1
    the long axis horizontal (SVD of centred coordinates), so the chain lies flat.
 5. Cube files are in **bohr**; PyVista scene is in Å. Convert with 0.529177.
 6. **`/tmp` in this WSL is a 7.7 GB tmpfs (RAM).** PySCF's analytic Hessian (`--freq`) for PAM3 writes
-   > 9 GB of scratch there and died with "No space left on device" (2026-11-13). `/root/.pyscf_conf.py`
-   sets `TMPDIR = '/var/tmp'` (root disk, ~950 GB free). Machine config, not in the repo: redo it on a
-   new machine.
+   > 9 GB of scratch there and died with "No space left on device" (2026-11-13). Fixed in code: `calc()`
+   puts PySCF scratch in `~/.cache/esp-scratch` unless `PYSCF_TMPDIR` is set (6794f8a). Direct PySCF calls
+   outside `calc()` (e.g. the sanity scripts' reference runs) still use the global setting:
+   `/root/.pyscf_conf.py` sets `TMPDIR = '/var/tmp'` on this machine (not in the repo).
 
 ## Model improvements
 

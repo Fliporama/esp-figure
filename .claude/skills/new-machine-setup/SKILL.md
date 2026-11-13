@@ -21,8 +21,9 @@ Offscreen rendering works without a display (a harmless
 
 Optional, for `--d3`: `pip install pyscf-dispersion`; `--opt` needs `geometric`.
 
-If `/tmp` is a small tmpfs (`df -h /tmp`; WSL often makes it RAM-backed), point PySCF's scratch at
-the disk, or `--freq` on PAM3 dies with "No space left on device" (> 9 GB scratch):
+`calc()` already keeps PySCF scratch on disk (`~/.cache/esp-scratch`). If `/tmp` is a small tmpfs
+(`df -h /tmp`; WSL often makes it RAM-backed), also point PySCF's global scratch at the disk, for direct
+PySCF calls outside `calc()` (sanity-script reference runs):
 
 ```bash
 echo "TMPDIR = '/var/tmp'" > ~/.pyscf_conf.py
