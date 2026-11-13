@@ -49,7 +49,12 @@
 - PAM3 frequencies (day session 2026-11-13, running/done outside the queue): `pam3s_fold_freq`
   (.xyz single point of the fold geometry), then the ext optimisation finished from step 58 with
   `--opt-conv qchem`. PySCF scratch moved to /var/tmp (`/root/.pyscf_conf.py`): /tmp is a 7.7 GB tmpfs and the
-  first fold run died there. Do not queue these again; an ext `--freq` job waits for the ext result.
+  first fold run died there. Do not queue these again.
+  Results: fold freq 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB RAM). Ext opt converged at step 59
+  (`--opt-conv qchem`), E -782.57747616, 0 H-bonds, ESP -0.0890/+0.1076: fold lower by 3.15 kcal/mol (unchanged).
+  `pam3s_ext_freq` (.xyz of `runs/pam3s_ext`) starts by itself after tonight's night run has pushed
+  (`runs/logs/ext_freq_after_night.sh`, outside the queue). **Do not queue it**, and keep the queue free of
+  long PAM3 jobs tonight: the day needs the CPU and RAM for it.
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->
