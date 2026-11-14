@@ -66,15 +66,10 @@
   def2). Left: def2 + ECP mixed basis (`night/sanity/def2.py`). Day session: look at a dimer/PAM3 `nci.png`, Multiwfn
   check of the dimer lobe. PAM3 validation runs once the CPU is free, e.g.
   `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_q --d3 --solvent water --charges mk --fukui` and a gas `--nci` run.
-- PAM3 frequencies (day session 2026-11-13, running/done outside the queue): `pam3s_fold_freq`
-  (.xyz single point of the fold geometry), then the ext optimisation finished from step 58 with
-  `--opt-conv qchem`. PySCF scratch moved to /var/tmp (`/root/.pyscf_conf.py`): /tmp is a 7.7 GB tmpfs and the
-  first fold run died there. Do not queue these again.
-  Results: fold freq 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB RAM). Ext opt converged at step 59
-  (`--opt-conv qchem`), E -782.57747616, 0 H-bonds, ESP -0.0890/+0.1076: fold lower by 3.15 kcal/mol (unchanged).
-  `pam3s_ext_freq` (.xyz of `runs/pam3s_ext`) starts by itself after tonight's night run has pushed
-  (`runs/logs/ext_freq_after_night.sh`, outside the queue). **Do not queue it**, and keep the queue free of
-  long PAM3 jobs tonight: the day needs the CPU and RAM for it.
+- PAM3 frequencies: **DONE, do not queue again.** `pam3s_fold_freq` 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB);
+  ext opt converged at step 59 (`--opt-conv qchem`, E -782.57747616, fold lower by 3.15 kcal/mol, unchanged);
+  `pam3s_ext_freq` 0 imaginary (3.6 h, 2026-11-14). Both conformers are minima. The CPU is free again: the
+  "no long PAM3 jobs" note of 2026-11-13 no longer applies.
 
 ## Answers
 <!-- Write your decisions here, one line each, e.g. "Stereo: syndiotactic". -->
