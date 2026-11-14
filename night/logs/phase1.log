@@ -1,53 +1,21 @@
-I haven't committed yet: `test_freq.py` has been running for more than 10 minutes, and I'm waiting for it to finish.
+I built three week-3 items tonight on `night/2026-11-13`, one commit each, plus a STATE/roadmap commit. Each has its own fast test, and each was reviewed by a subagent and fixed before committing. The locked sanity checks haven't run yet. `night.ps1` runs them after this phase, and they decide whether these items count as done. `test_water.py` (the default-output check) passes.
 
-The open question is the new D3 + water-solvent (PCM) case. It checks the analytic frequencies against finite differences, which needs 18 gradient calculations in solvent. I'll get a notification when it ends.
+| Commit | Item | Result |
+|---|---|---|
+| `bb460e5` | MK/CHelpG charges (`--charges mk\|chelpg`) | Water q(O) is −0.753 with MK, the same as the reference, and −0.749 with CHelpG. |
+| `66bffe3` | NCI (`--nci`; `render` draws `nci.png`) | The water dimer shows an H···O lobe at −0.025 a.u.; isolated water shows none. |
+| `2f464ce` | Fukui (`--fukui`) | Formaldehyde gives f+ C 0.278 / O 0.274 and f− O 0.434, matching the reference. The solvent path matches direct PySCF PCM runs. |
 
-**`--freq` so far:**
-- `calc(freq=True)` / `--freq` computes harmonic frequencies after the SCF or `--opt` and writes "frequencies (cm-1)" and "imaginary frequencies" to method.txt. Defaults are unchanged.
-- The gas-phase checks passed before the review fixes: optimised water gives 1710.7 / 3720.3 / 3844.2 cm⁻¹, within 0.2 of the reference, with 0 imaginary. Planar NH₃ gives exactly 1 imaginary mode (−898.6 cm⁻¹). The restart and water regression tests also pass.
-- I fixed a wrong caption: adding `--freq` (or `--orbitals`) to a finished `--opt` run used to say "restarted from an interrupted optimisation". It now says "continued from step N of a finished optimisation".
+**What you should know:**
+- **Order:** `code.md` says to take the first unchecked roadmap item, so NCI went before def2, not in the order STATE suggested. def2 + ECP is the only week-3 item left.
+- **`nci.png` hasn't been looked at.** Viewing it needed a command that isn't allowed at night, so I didn't try another way. Please delete the leftover script `runs/_look_nci.py`.
+- **NCI grid is coarse:** the grid size (`GRID`) limits the spacing, and PAM3 will be coarser than the ~0.1 bohr NCIPLOT uses. method.txt says this. The Multiwfn comparison is still a day-session job.
+- **Assumed MK radius:** Si and Br have no MK radius in the table, so 2.0 Å is assumed. method.txt says so.
 
-**Fixes from the review, not yet re-tested:**
-- A finished run is now refused, not overwritten, when the new request's `--opt` or `--no-hbond` differs. Before, asking for `--freq` without `--opt` could replace a DFT-optimised geometry with a draft single point.
-- The imaginary count is labelled as raw. On floppy chains, a few tens of cm⁻¹ can be numerical noise, so "0 imaginary" for PAM3 needs a look at the lowest modes, not just the count.
-- `--force` now also deletes the old method.txt.
-- I removed the "~1 h for PAM3" timing from the help text because it was never measured.
+**Changes outside the new features:**
+- **`--orbitals` bug fixed:** it was wiping earlier method.txt lines. The review found this.
+- **UKS choice:** `scf()` now picks UKS or RKS from the molecule's spin, so the Fukui ions can be doublets. Every caller gets the same choice as before, and `test_uks.py` passes.
 
-**Still to do once the test finishes:**
-1. Re-run `test_water.py` and `test_restart.py`, since I changed the cache and `--force` code after they passed.
-2. Commit as `night: Frequency check`, staging only my files. The deleted night-2 logs and report in the working tree were there before I started and stay out of the commit.
-3. Update STATE.md. I'll queue no PAM3 frequency jobs: STATE says to wait for your decision because the extended geometry isn't fully converged.
-
-Then I'll move on to open-shell UKS, the next roadmap item.
-
-Tonight's code phase built the two remaining week-2 items, frequency check and open-shell UKS, and committed both. The third item, MK charges, is skipped because week 3 needs your decisions, and nothing was added to the queue. All my tests pass, plus `test_water.py` and `test_restart.py`. I didn't run the `freq`/`uks` sanity scripts myself; the night runner runs them after this phase.
-
-**1. Frequency check: `calc --freq`**
-- It writes the frequencies and the number of imaginary ones to method.txt, as the sanity contract asks.
-- **Water:** 1710.7 / 3720.3 / 3844.2 cm⁻¹ (reference 1710.7 / 3720.5 / 3844.3), 0 imaginary.
-- **Planar NH₃:** exactly 1 imaginary mode (−898.6 cm⁻¹), as it should for a saddle point.
-- **With D3 + water solvent (PCM):** on water, the frequencies match a finite-difference check to 0.1 cm⁻¹. So the dispersion and solvent terms really are in the frequencies.
-- **Limits:**
-  - The imaginary count has no noise cutoff. On PAM3's soft torsions, a few tens of cm⁻¹ can be noise rather than a real saddle.
-  - I haven't timed a PAM3 run, so I don't know if it fits the 6 h job cap.
-
-**Fixes found along the way**
-- **Overwrite risk:** asking for `--freq` (or `--orbitals`) without `--opt` on a finished optimised run used to overwrite it with a draft single point. It now refuses.
-- **Wrong caption:** reusing a finished `--opt` run said "restarted … interrupted optimisation". It now says "continued from step N of a finished optimisation".
-- **Stale method.txt:** `--force` now also deletes the old method.txt.
-
-**2. Open-shell UKS: `calc --spin N`**
-- **CH₃ doublet:** energy equals a direct PySCF UKS run, ⟨S²⟩ is 0.7537, and the ESP (−0.0155 to +0.0194) comes from the total density.
-- **With `--opt --d3 --solvent water`:** the run converges and CH₃ stays a clean, planar doublet.
-- **Captions:** they now name the spin state, e.g. "UB3LYP/6-31G(d) (doublet)". The saved-run check and the restart check use the same string, so they won't mix up spin states.
-- **Spin contamination:** method.txt gets a warning if ⟨S²⟩ is more than 10 % off the pure-spin value.
-- **Still refused:** radicals without `--spin`, as before.
-- **Refused for now:**
-  - `--spin` with SMILES input, because the MMFF force field that builds SMILES geometries has no parameters for radicals.
-  - `--spin` with `--orbitals` or `--freq`, which are untested for open-shell runs.
-
-**Decisions for you (in `night/STATE.md`)**
-- **Week 3 (MK charges, NCI, Fukui, def2):** not built. `docs/week3-sanity-draft.md` is still unapproved and its four questions are open. My recommendations are the same as the draft's: MK only, own NCI code, Fukui via internal UKS runs, def2-SVP everywhere for heavy-element inputs.
-- **PAM3 frequency jobs:** queued none, as STATE says. The extended geometry stopped at step 58 without meeting the displacement criterion, so expect small imaginary torsion modes there. Decide whether to finish its optimisation first. I put a suggested queue line in STATE.
-
-Your uncommitted night-2 reports and logs in the working tree were left alone and not committed. The three commits are `b2808c7`, `9b098c6` and `c02e9a0`, the last one updating STATE and the roadmap.
+**Not done:**
+- **No queue jobs:** STATE asked to keep the queue free of PAM3 jobs tonight. Suggested PAM3 validation runs are written under Next in STATE.
+- **Uncommitted log and report deletions:** these were already in the working tree when I started (`NIGHT_REPORT.md`, `night/logs/*`, the result JSONs). I left them uncommitted.

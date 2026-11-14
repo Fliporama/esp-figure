@@ -1,1 +1,16 @@
-API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)
+I wrote the night report and committed it as `a9c6d52 night: report`. The night script pushes the branch.
+
+**Verdict: ✅ merge.**
+- All 4 regression checks pass.
+- The three items built tonight each pass their locked sanity check: MK/CHelpG charges (`--charges mk|chelpg`), NCI plots (`--nci`) and Fukui functions (`--fukui`).
+- Every earlier sanity check still passes. `def2` skips because it hasn't been built yet.
+
+**Things for you:**
+- **`nci.png` has never been looked at.** The night agent wasn't allowed to run the command it needed to view it. All the sanity check confirms is that the file gets written, so view it yourself before using NCI in a figure.
+- **The NCI roadmap tick says more than was tested.** `IMPROVEMENTS.md` says "checked against Multiwfn", but that comparison hasn't been run yet. The tick is allowed because the sanity check passes, and the line already notes the check is still open.
+- **Delete `runs/_look_nci.py`.** The night agent left it behind; it's git-ignored, so it does no harm meanwhile.
+- **No figures tonight.** No jobs were queued, so there was nothing to render, and the new features have only been run on small test molecules, not on PAM3.
+
+The report also lists candidate reference numbers for `night/reference.json`, such as water MK q(O) −0.7534 and the water dimer NCI H···O value −0.0253 a.u. The only week-3 item left is the def2 + ECP mixed basis for heavy elements.
+
+I left `night/logs/phase3.log` out of the commit because this review phase was still writing to it.

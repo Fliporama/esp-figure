@@ -123,9 +123,9 @@ next session.
 - [x] Open-shell UKS (§4): `calc --spin N`, .xyz input only (2026-11-13, night)
 
 **Week 3: analyses**
-- [ ] MK/CHelpG charges (§4)
-- [ ] RDG/NCI plots, own code, checked against Multiwfn (§5)
-- [ ] Fukui functions (§5, needs UKS)
+- [x] MK/CHelpG charges (§4): `calc --charges mk|chelpg` (2026-11-13, night)
+- [x] RDG/NCI plots, own code (§5): `calc --nci`, render `nci.png` (2026-11-13, night; Multiwfn check still open)
+- [x] Fukui functions (§5, needs UKS): `calc --fukui`, Mulliken-condensed (2026-11-13, night)
 - [ ] Basic def2 + ECP support for heavy elements (`.xyz` input; MMFF has no metals)
 
 **Week 4: validation + buffer**

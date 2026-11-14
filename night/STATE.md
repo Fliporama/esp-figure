@@ -38,14 +38,34 @@
   - No queue jobs: no PAM3 frequencies until you decide (see Next).
   - Phase 3 review failed (network, 02:12); review done in the day session 2026-11-13: regression + all sanity + tests pass, merged.
 
+- Night 2026-11-13 (second run; code + fast tests; `charges`/`nci`/`fukui` sanity run after this phase):
+  - MK/CHelpG charges `calc --charges mk|chelpg` (`test_charges.py`): one constrained least-squares fit
+    (`fit_points`, `fit_charges`), ESP at the fit points from the same `esp_at()` as the surface (refactored out,
+    default output unchanged). Water MK q(O) -0.753 (= day reference), CHelpG -0.749; RRMS 0.118 / 0.111.
+    MK radius for elements without a table value (Si, Br) is 2.0 Å, *assumed* and named in method.txt.
+    Side fix: `--orbitals` overwrote earlier method.txt lines (`orb =` -> `orb +=`).
+  - RDG/NCI `calc --nci` (`test_nci.py`): `rdg.cube` + `sl2rho.cube` on the dens.cube grid from analytic AO 2nd
+    derivatives; `render` draws `nci.png` (s = 0.5, rho < 0.05, sign(lambda2) rho on +/-0.04, blue = attractive;
+    caption says these colours are not ESP). Water dimer H...O lobe min -0.0253 a.u.; isolated water: none.
+    **nci.png has not been looked at** (viewing it needed a command outside the night allowlist; delete the leftover
+    `runs/_look_nci.py`). Grid spacing is GRID-limited (0.15-0.19 bohr for water; coarser for PAM3, NCIPLOT uses ~0.1),
+    stated in method.txt. Multiwfn comparison still a day-session job.
+  - Fukui `calc --fukui` (`test_fukui.py`): vertical UKS doublets N+-1 at the final geometry, same D3/PCM, Mulliken
+    condensation, `fukui.txt`. Formaldehyde f+ C 0.278 / O 0.274, f- O 0.434 (= reference); PCM path checked against
+    direct PySCF PCM runs. Unconverged ion SCF exits (nothing cached); <S^2> > 10 % off is flagged. Refused with --spin.
+    `scf()` now picks UKS/RKS from `mol.spin` (same choice as before for every caller; `test_uks.py` passes).
+  - No queue jobs: STATE asked to keep the queue free of PAM3 jobs tonight (ext freq outside the queue).
+  - Phase 3 review: regression 4/4 pass; sanity `charges`, `nci`, `fukui` pass (all earlier entries pass, `def2` skips).
+    Roadmap ticks for the three stand. `nci.png` still unviewed; Multiwfn check still open.
+
 ## Skipped (waiting on you)
 - (none)
 
 ## Next
-- **Week 3: build** MK/CHelpG charges, RDG/NCI, Fukui, def2 + ECP (mixed basis). Decisions under Answers
-  (2026-11-13); sanity scripts locked 2026-11-13 (`night/sanity/{charges,nci,fukui,def2}.py`, listed in
-  `reference.json`); the docstrings are the contracts, `docs/week3-sanity.md` explains the limits.
-  Suggested order: charges, def2, fukui, nci (nci's sanity takes ~40 min: the PAM3 cube).
+- **Week 3:** charges, NCI, Fukui built (see Done; taken in roadmap order as night/code.md says, so NCI before
+  def2). Left: def2 + ECP mixed basis (`night/sanity/def2.py`). Day session: look at a dimer/PAM3 `nci.png`, Multiwfn
+  check of the dimer lobe. PAM3 validation runs once the CPU is free, e.g.
+  `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_q --d3 --solvent water --charges mk --fukui` and a gas `--nci` run.
 - PAM3 frequencies (day session 2026-11-13, running/done outside the queue): `pam3s_fold_freq`
   (.xyz single point of the fold geometry), then the ext optimisation finished from step 58 with
   `--opt-conv qchem`. PySCF scratch moved to /var/tmp (`/root/.pyscf_conf.py`): /tmp is a 7.7 GB tmpfs and the
