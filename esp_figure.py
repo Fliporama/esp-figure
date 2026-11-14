@@ -42,7 +42,8 @@ SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaus
 PAM3 = "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O"
 # Elements with both MMFF94 parameters and a 6-31G(d) basis in PySCF (no I: 6-31G(d) stops before it)
 ELEMENTS = {"H", "C", "N", "O", "F", "Si", "P", "S", "Cl", "Br"}
-# ponytail: one list for SMILES and .xyz input; .xyz needs no MMFF, widen it when other basis sets arrive
+# .xyz input only (no MMFF): Z > 36 atoms get this basis + its ECP, every other atom keeps 6-31G(d) (user, 2026-11-13)
+HEAVY_BASIS = "def2-SVP"
 # Jmol-style colours; unknown elements fall back to pink (#ff69b4) so they stand out
 COLORS = {"H": "#f2f2f2", "C": "#7f7f7f", "N": "#1f3fff", "O": "#ff1f1f", "S": "#e6c619", "Cl": "#1fd01f",
           "F": "#90e050", "P": "#ff8000", "Si": "#f0c8a0", "Br": "#a62929", "I": "#940094", "B": "#ffb5b5",
@@ -205,13 +206,30 @@ def fit_charges(pts, V, xyz, total):
     return q, float(np.sqrt(((A @ q - V) ** 2).sum() / (V ** 2).sum()))
 
 
-def check_input(sym, charge, spin=0):
-    """Refuse what the method can't do, before any compute: unsupported elements, open-shell (radical) molecules
-    without an explicit spin, and spins that don't fit the electron count."""
+def heavy_atoms(sym):
+    """Elements with Z > 36 (sorted), which get HEAVY_BASIS + ECP. Exits if PySCF has no such basis or ECP for one."""
+    from pyscf import gto
     from pyscf.data.elements import charge as Z
-    bad = sorted(set(sym) - ELEMENTS)
+    heavy = sorted({s for s in sym if Z(s) > 36}, key=Z)
+    for s in heavy:
+        try:
+            ok = gto.basis.load(HEAVY_BASIS.lower(), s) and gto.basis.load_ecp(HEAVY_BASIS.lower(), s)
+        except Exception:
+            ok = False
+        if not ok:
+            sys.exit(f"unsupported element {s}: PySCF has no {HEAVY_BASIS} basis + ECP for it")
+    return heavy
+
+
+def check_input(sym, charge, spin=0, xyz=False):
+    """Refuse what the method can't do, before any compute: unsupported elements, open-shell (radical) molecules
+    without an explicit spin, and spins that don't fit the electron count. xyz=True also allows Z > 36 (def2 + ECP)."""
+    from pyscf.data.elements import charge as Z
+    bad = sorted(set(sym) - ELEMENTS - (set(heavy_atoms(sym)) if xyz else set()))
     if bad:
-        sys.exit(f"unsupported element(s) {', '.join(bad)}: MMFF94 + 6-31G(d) cover only {', '.join(sorted(ELEMENTS))}")
+        sys.exit(f"unsupported element(s) {', '.join(bad)}: MMFF94 + 6-31G(d) cover only {', '.join(sorted(ELEMENTS))}"
+                 + (f"; elements with Z > 36 ({HEAVY_BASIS} + ECP) need .xyz input"
+                    if not xyz and any(Z(s) > 36 for s in bad) else ""))
     n = sum(Z(s) for s in sym) - charge
     if spin == 0 and n % 2:
         sys.exit("odd number of electrons (radical / open-shell): give --spin (N_alpha - N_beta, e.g. 1 for a "
@@ -229,7 +247,7 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
         if no_hbond or top > 1:
             sys.exit("--no-hbond and --rerank need SMILES input (they pick among conformers)")
         sym, xyz = read_xyz(spec)
-        check_input(sym, charge, spin)
+        check_input(sym, charge, spin, xyz=True)
         src = xyz_origin(spec)
         return sym, xyz, charge, f"geometry read from {Path(spec).name}" + (
             f" (optimised at {src[1]} in run {src[0]})" if src else ""), None
@@ -297,6 +315,11 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     out = Path(root) / name
     log = out / "method.txt"
     level = "B3LYP-D3(BJ)/6-31G(d)" if d3 else LEVEL
+    heavy = heavy_atoms(read_xyz(spec)[0]) if spec.endswith(".xyz") else []   # SMILES with Z > 36: refused in geometry()
+    if heavy:
+        level += f" + {HEAVY_BASIS}/ECP ({', '.join(heavy)})"
+    if heavy and (nci or freq):   # ponytail: ECP removes core density (fake RDG lobes) and the ECP Hessian is untested
+        sys.exit(f"--nci and --freq are not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
     if spin:   # multiplicity in the level string: caption, run cache and restart tag all tell spin states apart
         level = f"U{level} ({ {1: 'doublet', 2: 'triplet', 3: 'quartet'}.get(spin, f'multiplicity {spin + 1}') })"
     if spin and (orbitals or freq):   # ponytail: HOMO/LUMO indexing and the UKS Hessian are untested; refuse for now
@@ -355,8 +378,10 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         xyz = np.array([r.split()[1:4] for r in last[2:]], float)
         geo = f"{geo}; {'continued from step' if log.exists() else 'restarted from step'} {done} of " \
               f"{'a finished' if log.exists() else 'an interrupted'} optimisation"
+    hb = HEAVY_BASIS.lower()   # mixed basis only when needed: runs without heavy atoms build exactly the old mol
+    basis, ecp = ({**{s: hb for s in heavy}, "default": "6-31g*"}, {s: hb for s in heavy}) if heavy else ("6-31g*", {})
     build = lambda x, q=charge, s=spin: gto.M(atom=[(a, tuple(map(float, r))) for a, r in zip(sym, x)], charge=q, spin=s,
-                                              basis="6-31g*", verbose=0)
+                                              basis=basis, ecp=ecp, verbose=0)
 
     def scf(mol):
         mf = (dft.UKS if mol.spin else dft.RKS)(mol).density_fit()
@@ -506,6 +531,9 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f"likely numerical noise on soft torsions; {int((f <= -FREQ_NOISE).sum())} clearly imaginary; "
                 f"0 clearly imaginary = minimum{where})\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
+    if heavy:
+        disp += (f"\nbasis: {HEAVY_BASIS} + {HEAVY_BASIS} ECP on {', '.join(heavy)}, 6-31G(d) on all other atoms; ESP nuclear "
+                 f"term uses the effective charges (" + ", ".join(f"{s} {mol.atom_charges()[sym.index(s)]}" for s in heavy) + ")")
     if spin:
         s2, ideal = mf.spin_square()[0], spin / 2 * (spin / 2 + 1)
         bad = abs(s2 - ideal) > 0.1 * ideal
