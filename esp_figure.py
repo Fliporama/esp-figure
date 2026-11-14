@@ -695,13 +695,17 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         if back:
             p.add_text("\n".join(back), position=(30, 25), font_size=14, color="black")   # pixels: keep off the edge
 
-    def aim(p, tilt=0.0):
+    def aim(p, tilt=0.0, axis=1, shift=0.0, flat=False):
         if view is None:                      # look down the thinnest axis, long axis horizontal
-            p.view_vector(ev[2] + tilt * ev[1], viewup=ev[1])
+            p.view_vector(ev[2] + tilt * ev[axis], viewup=ev[1])
         else:
             v = np.asarray(view, float)
-            p.view_vector(v, viewup=ev[1] if abs(v @ ev[1]) < 0.9 * np.linalg.norm(v) else ev[0])
+            up = np.cross(v, ev[0]) if flat else None   # flat: long axis horizontal (if v is not along it)
+            if up is None or np.linalg.norm(up) < 0.3 * np.linalg.norm(v):
+                up = ev[1] if abs(v @ ev[1]) < 0.9 * np.linalg.norm(v) else ev[0]
+            p.view_vector(v, viewup=up)
         p.camera.zoom(1.5)
+        p.camera.SetWindowCenter(shift, 0)   # > 0 moves the molecule left, clear of the colour bar
 
     def front_layer(mesh):
         """Only the triangles nearest the camera. Through a 70 % surface, a lobe hidden behind another shows its
@@ -720,7 +724,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         code = img[..., 0] + (img[..., 1] << 8) + (img[..., 2] << 16)
         return mesh.extract_cells(np.unique(code[code < mesh.n_cells])).extract_surface(algorithm="dataset_surface")
 
-    def shoot(path, add_surface=None, tilt=0.0):
+    def shoot(path, add_surface=None, tilt=0.0, axis=1, shift=0.0, flat=False):
         p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
         p.set_background("white")
         p.enable_depth_peeling(20)            # without it the transparent surface bands
@@ -728,7 +732,7 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         molecule(p)
         if add_surface:
             add_surface(p)
-        aim(p, tilt)
+        aim(p, tilt, axis, shift, flat)
         p.screenshot(path)
         p.close()
 
@@ -777,23 +781,29 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         g.point_data["sl2rho"] = read_cube(out / "sl2rho.cube")["rho"]
         g.point_data["absl"] = abs(g["sl2rho"])
         # s = 0.5 everywhere, then keep only the weak-density part (rho < 0.05): drops the shells around nuclei/bonds
-        lobe = g.contour([NCI_S], scalars="rho").clip_scalar(scalars="absl", value=NCI_RHO)
+        # and drop rho < 1e-4: at the box corners rho ~ 0, so s = |grad rho| / rho^(4/3) is noise (a spurious lobe
+        # 8 A from PAM3 also stretched the camera framing)
+        lobe = (g.contour([NCI_S], scalars="rho").clip_scalar(scalars="absl", value=NCI_RHO)
+                .clip_scalar(scalars="absl", value=1e-4, invert=False))
         nmap = LinearSegmentedColormap.from_list("nci", ["#0000ff", "#00c000", "#ff0000"])
 
         def nci_surface(p):
             if lobe.n_points:
                 p.add_mesh(lobe.extract_surface(algorithm="dataset_surface").smooth_taubin(n_iter=20).compute_normals(),
                            scalars="sl2rho", cmap=nmap, clim=(-NCI_LIM, NCI_LIM), smooth_shading=True, specular=0.3,
-                           scalar_bar_args=dict(title="sign(lambda2)*rho (a.u.)\n", fmt="%.3f", n_labels=5, color="black",
-                                                vertical=True, position_x=0.88, position_y=0.2, width=0.05, height=0.6,
+                           scalar_bar_args=dict(title="sign(lambda2)*rho\n(a.u.)\n", fmt="%.3f", n_labels=5, color="black",
+                                                vertical=True, position_x=0.86, position_y=0.2, width=0.05, height=0.6,
                                                 title_font_size=28, label_font_size=24))
             else:
                 p.add_text("no NCI surface (s = 0.5, rho < 0.05 a.u.)", position="upper_left", font_size=16, color="black")
-        shoot(out / "nci.png", nci_surface)
+        # tilted ~35 deg about the middle axis: an H-bond disc lies across the long axis, so the default view sees it
+        # edge-on; the tilt shows it face-on and shortens the molecule, the shift keeps it off the colour bar
+        shoot(out / "nci.png", nci_surface, tilt=0.7, axis=0, shift=0.15, flat=True)
         notes.append(f"nci.png: NCI isosurface, reduced density gradient s = {NCI_S} where rho < {NCI_RHO} a.u., coloured by "
                      f"sign(lambda2) rho from -{NCI_LIM} (blue, attractive, e.g. H-bonds) via 0 (green, weak van der Waals) "
                      f"to +{NCI_LIM} a.u. (red, steric repulsion), interpolated across the surface; these colours are not "
-                     f"ESP (blue = negative here, unlike the ESP maps)" + ("" if lobe.n_points else "; no NCI surface found"))
+                     f"ESP (blue = negative here, unlike the ESP maps)" + ("" if lobe.n_points else "; no NCI surface found")
+                     + ("; default view tilted ~35 deg about the middle axis from the ESP view" if view is None else ""))
     for e in ex:
         notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}): "
                      f"{e['value']:+.4f} a.u., nearest atom {e['atom']}; "
