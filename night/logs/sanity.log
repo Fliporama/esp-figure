@@ -5,7 +5,7 @@ PASS stereo (Stereo: require or set tacticity in SMILES)
   PASS syndiotactic (amide sides alternate along the zigzag): sides [1, -1, 1]
 PASS guards (Guards with clear errors)
   PASS guard [CH3]: exit 1; 'odd number of electrons (radical / open-shell): give --spin (N_alpha - N_beta, e.g. 1 for a doublet) to use UKS; or check the charge, or add the missing H'
-  PASS guard [Pd]: exit 1; 'unsupported element(s) Pd: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si'
+  PASS guard [Pd]: exit 1; 'unsupported element(s) Pd: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si; elements with Z > 36 (def2-SVP + ECP) need .xyz input'
   PASS guard CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O: exit 1; 'unspecified stereo (stereocentre at atom 1, stereocentre at atom 6, stereocentre at atom 11): write @/@@ or /\\ into the SMILES, e.g. syndiotactic PAM3 C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O'
 PASS d3 (D3(BJ) dispersion)
   PASS fold: E_disp < 0, 5-60 kcal/mol: -41.64 kcal/mol
@@ -98,5 +98,12 @@ PASS fukui (Fukui functions)
   PASS method.txt flags f+ as basis-limited: 
   PASS formamide: f- largest on O or N: f- [('N', np.float64(0.259)), ('C', np.float64(0.044)), ('O', np.float64(0.29)), ('H', np.float64(0.13)), ('H', np.float64(0.117)), ('H', np.float64(0.16))]
   PASS fukui with spin > 0 refused: --fukui needs a closed-shell molecule (--spin 0): N+1 and N-1 are then doublets
-SKIP def2 (Basic def2 + ECP support for heavy elements)
-  SKIP: esp_figure has no HEAVY_BASIS yet
+PASS def2 (Basic def2 + ECP support for heavy elements)
+  PASS CH3I energy matches direct PySCF (mixed basis + ECP): -337.70445097 vs -337.70445096
+  PASS method.txt names def2-SVP, ECP and 6-31G(d): B3LYP/6-31G(d) + def2-SVP/ECP (I), density fitting (PySCF default auxiliary basi
+  PASS CH3I surface ESP within +-0.1 a.u. (effective nuclear charge): -0.0202 to 0.0302
+  PASS CH3I sigma-hole > +0.01 a.u. on the C->I axis: +0.0256
+  PASS CH3I ESP minimum nearest I and < -0.01 (negative belt): -0.0202 at I
+  PASS CH3I renders: 
+  PASS HBr unchanged (no def2): B3LYP/6-31G(d), density fitting (PySCF default auxiliary bas
+  PASS SMILES CI refused with a clear message: unsupported element(s) I: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si; elements with Z > 36 (def2-SVP + ECP) need .xyz input

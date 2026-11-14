@@ -68,6 +68,8 @@
     atom; NCIPLOT adds a core density back) and `--freq` (ECP Hessian untested). `--opt`, `--d3`, `--solvent`,
     `--charges` (I radius 2.0 Å assumed, named), `--fukui`, `--spin` run with the mixed basis but are **untested**.
   - No queue jobs (no PAM3 relevance).
+  - Phase 3 review: regression 4/4 pass; sanity 17/17 pass incl. `def2`, so the roadmap tick stands. Branch is 2 commits
+    behind main (`8eb5fe3`, `f2484d0`, NCI render / `--nci-step`); hunks don't overlap by inspection.
 
 ## Skipped (waiting on you)
 - **Compare against a reference** (week 4): needs the purchased Gaussian reference files (.log/.fchk + geometry).
