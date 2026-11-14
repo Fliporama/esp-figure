@@ -289,7 +289,7 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None):
     if charges not in (None, "mk", "chelpg"):
         sys.exit(f"--charges must be mk or chelpg, got {charges}")
     if fukui and spin:   # ponytail: N+-1 of a radical would be singlet or triplet; not decided, so refused
@@ -422,7 +422,9 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     nci_line = ""
     if nci:   # Johnson et al. 2010 NCI index, on the dens.cube grid, from analytic AO 1st/2nd derivatives
         from pyscf.dft import numint
-        cube = cubegen.Cube(mol, GRID, GRID, GRID, margin=MARGIN)
+        # default: the dens.cube grid (sanity contract); --nci-step: own grid, atoms' box + 3 bohr, like NCIPLOT
+        cube = (cubegen.Cube(mol, GRID, GRID, GRID, margin=MARGIN) if nci_step is None
+                else cubegen.Cube(mol, resolution=nci_step, margin=3.0))
         c = cube.get_coords()
         S, L = np.empty(len(c)), np.empty(len(c))
         pairs = {(0, 0): 4, (0, 1): 5, (0, 2): 6, (1, 1): 7, (1, 2): 8, (2, 2): 9}   # eval_ao order: xx xy xz yy yz zz
@@ -440,8 +442,11 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         cube.write(S.reshape(cube.nx, cube.ny, cube.nz), str(out / "rdg.cube"), comment="reduced density gradient s")
         cube.write(L.reshape(cube.nx, cube.ny, cube.nz), str(out / "sl2rho.cube"), comment="sign(lambda2) rho (a.u.)")
         nci_line = (f"NCI: rdg.cube (reduced density gradient s = |grad rho| / (2 (3 pi^2)^(1/3) rho^(4/3))) and sl2rho.cube "
-                    f"(sign(lambda2) rho, a.u.) on the density grid (spacing up to {np.diag(cube.box).max() / (GRID - 1):.2f} bohr; NCIPLOT "
-                    f"uses ~0.1, so weak lobes may look blocky), analytic AO derivatives; nci.png: s = {NCI_S} where "
+                    f"(sign(lambda2) rho, a.u.) on "
+                    + (f"the density grid (spacing up to {np.diag(cube.box).max() / (GRID - 1):.2f} bohr; NCIPLOT uses ~0.1, "
+                       f"so weak lobes may look blocky)" if nci_step is None else
+                       f"its own grid ({cube.nx}x{cube.ny}x{cube.nz}, spacing {nci_step} bohr, atoms' box + 3.0 bohr)")
+                    + f", analytic AO derivatives; nci.png: s = {NCI_S} where "
                     f"rho < {NCI_RHO} a.u., coloured by sign(lambda2) rho on +/-{NCI_LIM} a.u. (Johnson et al. 2010)\n")
     pts = surf.points / B2A
     V = esp_at(mol, dm, pts)
@@ -843,6 +848,8 @@ if __name__ == "__main__":
                    help="ESP-fitted atomic charges (MK shells or CHelpG grid, total-charge constraint) -> charges.txt")
     c.add_argument("--nci", action="store_true",
                    help="RDG / sign(lambda2) rho cubes for NCI analysis; render then draws nci.png (PAM3: tens of minutes)")
+    c.add_argument("--nci-step", type=float, metavar="BOHR",
+                   help="with --nci: own NCI grid at this spacing (NCIPLOT ~0.1), atoms' box + 3 bohr; default the density grid")
     c.add_argument("--fukui", action="store_true",
                    help="condensed Fukui f+/f- (Mulliken) from UKS N+1/N-1 at the final geometry -> fukui.txt (closed shell only; two extra SCFs)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
@@ -863,7 +870,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
