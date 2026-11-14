@@ -58,13 +58,36 @@
   - Phase 3 review: regression 4/4 pass; sanity `charges`, `nci`, `fukui` pass (all earlier entries pass, `def2` skips).
     Roadmap ticks for the three stand. `nci.png` still unviewed; Multiwfn check still open.
 
+- Night 2026-11-15 (code + fast tests; `def2` sanity runs after this phase, I could not run it here: needs approval):
+  - def2 + ECP mixed basis (`test_def2.py`): `.xyz` atoms with Z > 36 get def2-SVP + def2 ECP, all others 6-31G(d)
+    (`HEAVY_BASIS`, `heavy_atoms()`); runs without heavy atoms build the same Mole as before (basis "6-31g*", no ECP).
+    CH3I: E -337.70445097 = direct PySCF, ESP -0.0202/+0.0302, sigma hole on the C->I axis, minimum at I (belt);
+    method.txt names the effective nuclear charge (I 25). HBr unchanged. SMILES `CI` refused (hint: use .xyz);
+    elements without a def2-SVP ECP (Fr) refused.
+    Refused with ECP atoms (review): `--nci` (ECP removes the core density, so RDG would show fake lobes near the heavy
+    atom; NCIPLOT adds a core density back) and `--freq` (ECP Hessian untested). `--opt`, `--d3`, `--solvent`,
+    `--charges` (I radius 2.0 Å assumed, named), `--fukui`, `--spin` run with the mixed basis but are **untested**.
+  - No queue jobs (no PAM3 relevance).
+
 ## Skipped (waiting on you)
-- (none)
+- **Compare against a reference** (week 4): needs the purchased Gaussian reference files (.log/.fchk + geometry).
+  Question: has the reference been bought, and where do the files go? Recommendation: put them in `ref/` and queue
+  `calc ref/<geom>.xyz --name ref_pam3` at the reference's level (likely B3LYP/6-31G(d), check the .log route line).
+- **IGM via Multiwfn export** (week 4): needs a Multiwfn download/install, which the night can't do. Question: may a
+  day session install Multiwfn in WSL (the NCI check needs it anyway)? Recommendation: yes, install once for both.
+- **IR spectrum** (week 4): needs decisions. (1) Intensities need dipole derivatives; PySCF has no built-in IR
+  intensity for DF-RKS + PCM, so: finite-difference dipoles (6N SCFs, ~1 day for PAM3) or the analytic route
+  in `pyscf.prop`/`pyscf-properties` (a pip install)? (2) Frequency scale factor (recommend ~0.96 for
+  B3LYP/6-31G(d); check the exact value in NIST CCCBDB before use) and Lorentzian FWHM (recommend 10 cm-1). Recommendation: finite differences on
+  formamide first, no install.
+- **UV-Vis (TD-DFT)** (stretch): needs decisions: number of states (recommend 10), broadening (Gaussian, 0.3 eV),
+  and whether 6-31G(d) without diffuse functions is acceptable (it shifts Rydberg-like states up; recommend
+  6-31+G(d) for the TD step, which changes the caption).
 
 ## Next
-- **Week 3:** charges, NCI, Fukui built (see Done; taken in roadmap order as night/code.md says, so NCI before
-  def2). Left: def2 + ECP mixed basis (`night/sanity/def2.py`). Day session: look at a dimer/PAM3 `nci.png`, Multiwfn
-  check of the dimer lobe. PAM3 validation runs once the CPU is free, e.g.
+- **Week 3: done** (charges, NCI, Fukui, def2). Day session: look at a dimer/PAM3 `nci.png`, Multiwfn
+  check of the dimer lobe; decide whether to test `--opt` with ECP atoms (e.g. CH3I C-I distance vs. ~2.14 Å).
+- **Week 4:** all items wait on you (see Skipped). PAM3 validation runs once the CPU is free, e.g.
   `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_q --d3 --solvent water --charges mk --fukui` and a gas `--nci` run.
 - PAM3 frequencies: **DONE, do not queue again.** `pam3s_fold_freq` 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB);
   ext opt converged at step 59 (`--opt-conv qchem`, E -782.57747616, fold lower by 3.15 kcal/mol, unchanged);
