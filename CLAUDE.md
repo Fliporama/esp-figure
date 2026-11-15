@@ -118,7 +118,13 @@ First target molecule: polyacrylamide (PAM) oligomer.
   check passed** (s 2e-4 rel., sl2rho 8.5e-5, lobe −0.02634 identical): Multiwfn 2026.11.13 noGUI in `/root/multiwfn`,
   IGM unblocked; how to script it and the RDG_maxrho = 0.05 gotcha: `docs/multiwfn-nci-check.md`.
   **IGM sanity check locked** (`night/sanity/igm.py`, IGMH via Multiwfn, `--igm`/`--igm-frags`; 8600b0c). PAM3 Fukui
-  in water failed (N-1 UKS SCF not converged; run exits without method.txt): fix described in STATE "Next".
+  in water: fixed (ebf7d40) and rerun, f- top carbonyl O4/O9, f+ top C13 (`runs/pam3s_fold_q`).
+  **Free energies fold vs. ext** (298.15 K, 1 atm, from the `pam3s_{fold,ext}_freq` frequencies, unscaled; script
+  `runs/pam3s_thermo.py`, output `runs/pam3s_thermo.txt`): dE −3.15, dZPE +0.72, dH −3.01, −TdS +1.72 (RRHO) / +1.38
+  (quasi-RRHO, Grimme 100 cm⁻¹) → **dG −1.29 (RRHO) / −1.62 (qRRHO) kcal/mol**, folded still lower. Folding costs
+  entropy, so the preference halves again (gas no D3: 6.3 → water+D3: 3.15 → G: ~1.5). ~1.5 kcal/mol is within the
+  error of one conformer each, harmonic soft modes (6–7 below 100 cm⁻¹) and implicit solvent: call it "comparable",
+  not "folded preferred".
 
 ## This machine
 
