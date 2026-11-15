@@ -128,7 +128,8 @@ next session.
 - [x] RDG/NCI plots, own code (§5): `calc --nci`, render `nci.png` (2026-11-13, night). Pictures checked by eye and
   fixed 2026-11-15; `--nci-step 0.1` for figures. **Multiwfn check still open** (waiting on a manual download)
 - [x] Fukui functions (§5, needs UKS): `calc --fukui`, Mulliken-condensed (2026-11-13, night)
-- [ ] Basic def2 + ECP support for heavy elements (`.xyz` input; MMFF has no metals)
+- [x] Basic def2 + ECP support for heavy elements (`.xyz` input; MMFF has no metals) (2026-11-15, night; mixed basis,
+  Z > 36 only; `--nci`/`--freq` refused with ECP atoms)
 
 **Week 4: validation + buffer**
 - [ ] Compare against a reference (see below), add tests, update docs

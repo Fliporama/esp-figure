@@ -1,21 +1,26 @@
-I built three week-3 items tonight on `night/2026-11-13`, one commit each, plus a STATE/roadmap commit. Each has its own fast test, and each was reviewed by a subagent and fixed before committing. The locked sanity checks haven't run yet. `night.ps1` runs them after this phase, and they decide whether these items count as done. `test_water.py` (the default-output check) passes.
+I built one item tonight, the def2 + ECP mixed basis, which was the last Week-3 item. The four Week-4 items all wait on you, so I logged them as skipped with questions. `test_def2.py` and `test_water.py` pass. I could not run the locked `night/sanity/def2.py`: running it directly needed approval. The sanity phase after this one runs it.
 
-| Commit | Item | Result |
-|---|---|---|
-| `bb460e5` | MK/CHelpG charges (`--charges mk\|chelpg`) | Water q(O) is −0.753 with MK, the same as the reference, and −0.749 with CHelpG. |
-| `66bffe3` | NCI (`--nci`; `render` draws `nci.png`) | The water dimer shows an H···O lobe at −0.025 a.u.; isolated water shows none. |
-| `2f464ce` | Fukui (`--fukui`) | Formaldehyde gives f+ C 0.278 / O 0.274 and f− O 0.434, matching the reference. The solvent path matches direct PySCF PCM runs. |
+**What changed** (commit `2aa0182`):
+- **Mixed basis:** in `.xyz` input, atoms heavier than krypton (Z > 36) get def2-SVP plus its ECP (a pseudopotential that replaces the core electrons). All other atoms keep 6-31G(d).
+- **Defaults:** runs without such atoms build exactly the same calculation as before. Water gives the same numbers.
+- **Caption:** the level line reads "B3LYP/6-31G(d) + def2-SVP/ECP (I)". `method.txt` also states that the nuclear term of the ESP uses iodine's effective charge of 25 (53 minus 28 core electrons).
+- **Methyl iodide (CH₃I):** the energy matches a direct PySCF run with the same basis. The ESP runs from −0.020 to +0.030 a.u., with the expected positive spot (σ-hole) on the C→I axis beyond iodine and the negative minimum next to iodine. These match the reference numbers in the sanity script.
+- **Refused inputs:**
+  - SMILES containing iodine are refused, with a hint to use `.xyz`.
+  - Elements with no def2-SVP ECP in PySCF are refused (tested with francium).
+  - HBr (bromine is Z = 35) stays on 6-31G(d) as required.
 
-**What you should know:**
-- **Order:** `code.md` says to take the first unchecked roadmap item, so NCI went before def2, not in the order STATE suggested. def2 + ECP is the only week-3 item left.
-- **`nci.png` hasn't been looked at.** Viewing it needed a command that isn't allowed at night, so I didn't try another way. Please delete the leftover script `runs/_look_nci.py`.
-- **NCI grid is coarse:** the grid size (`GRID`) limits the spacing, and PAM3 will be coarser than the ~0.1 bohr NCIPLOT uses. method.txt says this. The Multiwfn comparison is still a day-session job.
-- **Assumed MK radius:** Si and Br have no MK radius in the table, so 2.0 Å is assumed. method.txt says so.
+**Weak points:**
+- **Two flags are now refused with heavy atoms (the review found these).**
+  - `--nci`: without the core electrons the density near iodine is artificially low, so the NCI plot would show interactions that don't exist.
+  - `--freq`: the frequency calculation with an ECP is untested.
+- **Untested combinations:** `--opt`, `--d3`, `--solvent`, `--charges`, `--fukui` and `--spin` all run with the mixed basis, but nothing has checked them.
+- **Charges on iodine:** for `--charges`, iodine has no tabulated radius, so it uses an assumed 2.0 Å. This is stated in `method.txt`.
 
-**Changes outside the new features:**
-- **`--orbitals` bug fixed:** it was wiping earlier method.txt lines. The review found this.
-- **UKS choice:** `scf()` now picks UKS or RKS from the molecule's spin, so the Fukui ions can be doublets. Every caller gets the same choice as before, and `test_uks.py` passes.
+**Questions for you** (in `night/STATE.md` under Skipped):
+1. **Reference comparison:** have you bought the Gaussian reference files, and where should they go?
+2. **IGM:** may a day session install Multiwfn? The NCI check needs it as well.
+3. **IR spectrum:** PySCF has no built-in IR intensities for this setup. Should I compute them by finite differences (about a day of compute for PAM3) or install a package? I'd also need a frequency scale factor (about 0.96 for this method) and a peak width (I suggest 10 cm⁻¹).
+4. **UV-Vis:** how many states, how much broadening, and should the excited-state step use 6-31+G(d)? 6-31G(d) lacks diffuse functions, which shifts some states up.
 
-**Not done:**
-- **No queue jobs:** STATE asked to keep the queue free of PAM3 jobs tonight. Suggested PAM3 validation runs are written under Next in STATE.
-- **Uncommitted log and report deletions:** these were already in the working tree when I started (`NIGHT_REPORT.md`, `night/logs/*`, the result JSONs). I left them uncommitted.
+No queue jobs, because nothing in this item needs a PAM3 run. STATE and the roadmap are updated and committed (`5770a9b`).
