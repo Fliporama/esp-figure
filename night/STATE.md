@@ -133,3 +133,5 @@
   4. UV-Vis: TD-DFT, 10 states, Gaussian broadening 0.3 eV (FWHM). The TD step uses 6-31+G(d) (ground state redone
      in that basis), the caption says so; the ESP/geometry basis is unchanged. Build only after IR.
   Week 4 has no locked sanity checks yet: build and mark "unvalidated: needs a sanity check" as code.md says.
+- Interactive view picker (user, 2026-11-16): day session only (needs a live window and a check by eye). Night: skip it
+  without a question and without listing it under Skipped.

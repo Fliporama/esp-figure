@@ -65,7 +65,7 @@ Status (2026-11-15): every item marked **DONE** is built and ticked in the Roadm
 - **DONE 2026-11-12** (`render --hbonds`, `bond_list`). H-bonds drawn as dashed lines; double bonds drawn as double sticks.
 
 **Nice to have**
-- Interactive view to pick the camera, then print the `--view` vector.
+- Interactive view to pick the camera, then print the `--view` vector. **On the Roadmap 2026-11-16** (day session only, `render --pick`).
 - Surface style options: opacity, solid vs. mesh.
 - Atom labels / numbering.
 - **DONE 2026-11-13** (`--spin N`, .xyz input). Open-shell molecules (spin multiplicity, UKS): was closed-shell RKS only.
@@ -143,6 +143,12 @@ next session.
 - [ ] IGM via Multiwfn export (§5), if time
 - [ ] IR spectrum from the frequency calc, if time
 - [ ] UV-Vis (TD-DFT): stretch
+
+**Day session only (night agent: skip without a question, see STATE Answers)**
+- [ ] Interactive view picker (§4, added 2026-11-16): `render NAME --pick` opens a live PyVista window (WSLg) with the
+  same surface, colours, limits and lighting as the PNG; rotate with the mouse, a key prints the `--view` vector to
+  paste into `render`. Needs a check by eye (window opens under WSL; printed view reproduces the same picture), which
+  a night can't do. Default `render` stays offscreen.
 
 **Validation reference:** buy one PAM3 ESP figure from a commercial service
 (~500 yuan) *with raw files* (Gaussian `.log`/`.fchk` + geometry). Run our tool
