@@ -72,19 +72,7 @@
     behind main (`8eb5fe3`, `f2484d0`, NCI render / `--nci-step`); hunks don't overlap by inspection.
 
 ## Skipped (waiting on you)
-- **Compare against a reference** (week 4): needs the purchased Gaussian reference files (.log/.fchk + geometry).
-  Question: has the reference been bought, and where do the files go? Recommendation: put them in `ref/` and queue
-  `calc ref/<geom>.xyz --name ref_pam3` at the reference's level (likely B3LYP/6-31G(d), check the .log route line).
-- **IGM via Multiwfn export** (week 4): needs a Multiwfn download/install, which the night can't do. Question: may a
-  day session install Multiwfn in WSL (the NCI check needs it anyway)? Recommendation: yes, install once for both.
-- **IR spectrum** (week 4): needs decisions. (1) Intensities need dipole derivatives; PySCF has no built-in IR
-  intensity for DF-RKS + PCM, so: finite-difference dipoles (6N SCFs, ~1 day for PAM3) or the analytic route
-  in `pyscf.prop`/`pyscf-properties` (a pip install)? (2) Frequency scale factor (recommend ~0.96 for
-  B3LYP/6-31G(d); check the exact value in NIST CCCBDB before use) and Lorentzian FWHM (recommend 10 cm-1). Recommendation: finite differences on
-  formamide first, no install.
-- **UV-Vis (TD-DFT)** (stretch): needs decisions: number of states (recommend 10), broadening (Gaussian, 0.3 eV),
-  and whether 6-31G(d) without diffuse functions is acceptable (it shifts Rydberg-like states up; recommend
-  6-31+G(d) for the TD step, which changes the caption).
+- (none; the four week-4 questions are answered under Answers, 2026-11-15)
 
 ## Next
 - **Week 3: done** (charges, NCI, Fukui, def2). Day session: look at a dimer/PAM3 `nci.png`, Multiwfn
@@ -122,3 +110,17 @@
   3. Fukui: OK to call UKS internally for N+1 / N-1 at the fixed neutral geometry, also from SMILES input.
      Mulliken-difference condensation; method.txt flags f+ as basis-limited (6-31G(d), no diffuse functions).
   4. def2: build it, MIXED basis: 6-31G(d) on H-Kr, def2-SVP + def2 ECP only on Z > 36; caption names both.
+- Week 4 (user, 2026-11-15, taking the night's recommendations):
+  1. Reference comparison: the Gaussian files go in `ref/` (.log/.fchk + geometry). Not bought yet: until `ref/`
+     holds them, skip this item WITHOUT a question. When they are there: queue `calc ref/<geom>.xyz --name ref_pam3`
+     at the reference's level (read the .log route line); mind 5d (PySCF) vs 6d (Gaussian default) for 6-31G(d).
+  2. Multiwfn: approved, installed by a day session at `/root/multiwfn` (manual download, site has a CAPTCHA).
+     IGM only after the NCI water-dimer check against Multiwfn has passed. Until `/root/multiwfn` exists, skip
+     IGM without a question.
+  3. IR: finite-difference dipole derivatives, no install; build and validate on formamide first (water too).
+     Scale factor 0.960 (NIST CCCBDB, B3LYP/6-31G*), applied to the plotted spectrum only, raw frequencies kept
+     in method.txt; Lorentzian FWHM 10 cm-1. Caption names scale factor, FWHM and "harmonic". A PAM3 IR run
+     (~1 day) is NOT a queue job: list it under Next for a day session.
+  4. UV-Vis: TD-DFT, 10 states, Gaussian broadening 0.3 eV (FWHM). The TD step uses 6-31+G(d) (ground state redone
+     in that basis), the caption says so; the ESP/geometry basis is unchanged. Build only after IR.
+  Week 4 has no locked sanity checks yet: build and mark "unvalidated: needs a sanity check" as code.md says.
