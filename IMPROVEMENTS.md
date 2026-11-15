@@ -161,7 +161,8 @@ give better-documented PAM figures than the paid service.
 
 - ~~Loose convergence for floppy chains~~ done 2026-11-12: `--opt-conv qchem` (geomeTRIC `qccnv`:
   RMS gradient AND (energy OR RMS displacement); GAU_LOOSE rejected, its gradients are ~6x looser).
-  Sanity `optconv` (formamide) only shows "no worse": formamide is too stiff to show the gain.
+  Sanity `optconv` uses n-butane (gau 5 / qchem 4 steps); formamide was too stiff (7/7) and passed
+  even with `qccnv` disconnected.
 - ~~Dark seams on folded surfaces~~ fixed 2026-11-12: render draws only the surface layer nearest
   the camera (CLAUDE.md pitfall 3). A faint fringe remains where one lobe's edge overlaps another.
 - ~~method.txt for an `.xyz` single point~~ done 2026-11-13: a `runs/<x>/mol.xyz` input of a finished `--opt`
