@@ -117,6 +117,8 @@ First target molecule: polyacrylamide (PAM) oligomer.
   km/mol, formamide C=O strongest, methane 3 dark modes, scaled Lorentzian; `docs/week4-sanity.md`). **Multiwfn NCI
   check passed** (s 2e-4 rel., sl2rho 8.5e-5, lobe −0.02634 identical): Multiwfn 2026.11.13 noGUI in `/root/multiwfn`,
   IGM unblocked; how to script it and the RDG_maxrho = 0.05 gotcha: `docs/multiwfn-nci-check.md`.
+  **IGM sanity check locked** (`night/sanity/igm.py`, IGMH via Multiwfn, `--igm`/`--igm-frags`; 8600b0c). PAM3 Fukui
+  in water failed (N-1 UKS SCF not converged; run exits without method.txt): fix described in STATE "Next".
 
 ## This machine
 
