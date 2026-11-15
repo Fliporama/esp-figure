@@ -16,7 +16,7 @@ ECP effective charge in the nuclear ESP.
 | NCI cube vs direct | 1e-6 a.u. | 1e-3 relative | cube files keep ~6 significant digits, and the script's own SCF differs slightly (reference 1.05e-4 relative; a sign error gives 2) |
 | PAM3 H-bond lobe | < -0.01 | < -0.01 below 2.3 Å, else < -0.005 | baseline H26...O16 is 2.50 Å (at the cutoff), correctly -0.0078 |
 | HI polarity | ESP max at H | dropped: CH3I sigma-hole (> +0.01 on the C-I axis) and belt (min at I, < -0.01) | iodine's sigma-hole makes the HI maximum sit on I (+0.040); my test was wrong chemistry |
-| Multiwfn comparison | +-20 % | day session after the build (download approved) | needs our NCI code to exist first |
+| Multiwfn comparison | +-20 % | done 2026-11-15: s within 1 %, sl2rho within 1e-3, lobe −0.0263 | passed by far (2e-4 / 8.5e-5 / identical); `docs/multiwfn-nci-check.md` |
 
 Runtimes on the reference (CPU shared with a PAM3 frequency run): charges 2 min, def2 2 min, fukui 4 min,
 nci 42 min (PAM3 cube dominates). Timeouts in reference.json: 900 / 900 / 1200 / 3600 s.

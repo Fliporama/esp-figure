@@ -75,8 +75,9 @@
 - (none; the four week-4 questions are answered under Answers, 2026-11-15)
 
 ## Next
-- **Week 3: done** (charges, NCI, Fukui, def2). Day session: look at a dimer/PAM3 `nci.png`, Multiwfn
-  check of the dimer lobe; decide whether to test `--opt` with ECP atoms (e.g. CH3I C-I distance vs. ~2.14 Å).
+- **Multiwfn NCI check PASSED (day, 2026-11-15)**: `/root/multiwfn` exists, so IGM (week 4 #2) is unblocked; how to drive
+  Multiwfn non-interactively: `docs/multiwfn-nci-check.md`. IR sanity check locked (`night/sanity/ir.py`).
+- **Week 3: done** (charges, NCI, Fukui, def2). Day session: decide whether to test `--opt` with ECP atoms (e.g. CH3I C-I distance vs. ~2.14 Å).
 - **Week 4:** all items wait on you (see Skipped). PAM3 validation runs once the CPU is free, e.g.
   `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_q --d3 --solvent water --charges mk --fukui` and a gas `--nci` run.
 - PAM3 frequencies: **DONE, do not queue again.** `pam3s_fold_freq` 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB);

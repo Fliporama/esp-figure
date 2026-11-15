@@ -126,7 +126,7 @@ next session.
 **Week 3: analyses**
 - [x] MK/CHelpG charges (§4): `calc --charges mk|chelpg` (2026-11-13, night)
 - [x] RDG/NCI plots, own code (§5): `calc --nci`, render `nci.png` (2026-11-13, night). Pictures checked by eye and
-  fixed 2026-11-15; `--nci-step 0.1` for figures. **Multiwfn check still open** (waiting on a manual download)
+  fixed 2026-11-15; `--nci-step 0.1` for figures. Multiwfn check **passed** 2026-11-15 (water dimer: s within 2e-4 rel., sl2rho within 8.5e-5, lobe −0.02634 both; `docs/multiwfn-nci-check.md`)
 - [x] Fukui functions (§5, needs UKS): `calc --fukui`, Mulliken-condensed (2026-11-13, night)
 - [x] Basic def2 + ECP support for heavy elements (`.xyz` input; MMFF has no metals) (2026-11-15, night; mixed basis,
   Z > 36 only; `--nci`/`--freq` refused with ECP atoms)

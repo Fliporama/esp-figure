@@ -108,18 +108,15 @@ First target molecule: polyacrylamide (PAM) oligomer.
 - **Night 4 + day session 2026-11-15** (night 2026-11-13 #2 merged: MK/CHelpG `--charges`, `--nci`, `--fukui`;
   night 2026-11-15 built def2 + ECP mixed basis, merged 712d9f7, all tests pass; week 3 done). Week-4 answers
   are in `night/STATE.md` (IR by finite differences, scale 0.960, FWHM 10; UV-Vis 10 states, 0.3 eV, 6-31+G(d)).
-  **Next day session:** (1) Multiwfn NCI check (below) once the user has downloaded it; (2) write and lock an
-  IR sanity check (`night/sanity/ir.py`: water mode intensity order vs literature, formamide C=O strongest)
-  before the night that builds IR, else the night marks IR "unvalidated". PAM3 freqs: fold and ext both 0 imaginary
+  PAM3 freqs: fold and ext both 0 imaginary
   (ext opt converged at step 59, fold still lower by 3.15 kcal/mol). NCI pictures checked by eye and fixed
   (8eb5fe3: colour bar, tilted default view, rho < 1e-4 box-corner noise dropped); `calc --nci-step 0.1`
   (f2484d0) = NCIPLOT-like own grid. Figures: `runs/water_dimer_nci{,_fine}`, `runs/pam3s_fold_nci{,_fine}`
   (`--view=0.02,0.87,0.50 --hbonds`; H26···O16 lobe −0.030 a.u., vdW patches green, no red).
-  **Open: Multiwfn check of NCI on the water dimer.** The site has a CAPTCHA, so the user downloads the
-  Linux noGUI zip by hand into Windows Downloads. Then: unzip to `/root/multiwfn` (outside the repo);
-  wavefunction ready at `runs/multiwfn_check/water_dimer.molden` (same SCF as `calc`, E −152.82371656);
-  Multiwfn fn 5 RDG + sign(λ2)ρ on the grid of `runs/water_dimer_nci_fine/rdg.cube`; pass = s within 1 %,
-  sl2rho within 1e-3, H-bond lobe min −0.0263 a.u. Then tick the Multiwfn part in IMPROVEMENTS.md.
+- **Day session 2026-11-15 (afternoon):** IR sanity check locked (`night/sanity/ir.py`, 113e6ae; water 79.6/1.8/20.1
+  km/mol, formamide C=O strongest, methane 3 dark modes, scaled Lorentzian; `docs/week4-sanity.md`). **Multiwfn NCI
+  check passed** (s 2e-4 rel., sl2rho 8.5e-5, lobe −0.02634 identical): Multiwfn 2026.11.13 noGUI in `/root/multiwfn`,
+  IGM unblocked; how to script it and the RDG_maxrho = 0.05 gotcha: `docs/multiwfn-nci-check.md`.
 
 ## This machine
 
