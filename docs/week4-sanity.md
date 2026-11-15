@@ -1,5 +1,28 @@
 # Week-4 sanity checks
 
+## IGM: LOCKED 2026-11-15 (day session)
+
+`night/sanity/igm.py` is the contract (docstring wins). Method: **IGMH** (Lu & Chen, JCC 43, 539 (2022): IGM on a
+Hirshfeld partition of the real density), run by Multiwfn from a molden export; recommended over the original
+promolecular IGM (PCCP 19, 17928 (2017)) because it uses our actual wavefunction. Fragments: covalent molecules by
+default, `--igm-frags` for intramolecular contacts (PAM3: the two amide groups of an H-bond).
+
+| Check | Limit | Reference value |
+|---|---|---|
+| grid | spacing <= 0.2 bohr, >= 2.5 bohr beyond atoms | 0.200, 2.74 |
+| dimer delta-g_inter max | on the H...O segment, sign(l2)rho < -0.015 | 0.0455 at 1.67 Å, -0.0254 |
+| dimer behind donor | max < 1e-3 | 0 |
+| dimer integral | within 10 % | 0.0856 (= Multiwfn's own printout 0.085546) |
+| PAM3 fold (gas baseline), shortest H-bond H35...O5 | max on that contact, sign(l2)rho < -0.01 | 0.0294, -0.0161 (NCI check: -0.0166) |
+| PAM3 integral | within 10 % | 0.0757 |
+| single molecule, no fragments | clean exit | - |
+
+Deliberate bugs, all caught: 0-based fragment indices (5 checks), delta-g instead of delta-g_inter (5), promolecular
+IGM instead of IGMH (both integrals, 3.4x too large; location checks pass, so the integrals are what tell the
+methods apart), spacing 0.378 bohr (grid check; that run's method.txt still claimed 0.2). Not independent: the
+reference itself calls Multiwfn, so this checks plumbing (fragments, grid, files, sign) and chemistry anchors,
+not Multiwfn's IGMH. Runtime ~7 min (two SCFs + Multiwfn). Multiwfn ignores an "A" suffix on the spacing prompt.
+
 ## IR: LOCKED 2026-11-15 (day session)
 
 `night/sanity/ir.py` is the contract; its docstring wins over this file. Decisions in `night/STATE.md` Answers

@@ -24,6 +24,7 @@
   "nci":      {"script": "night/sanity/nci.py",      "item": "RDG/NCI plots, own code, checked against Multiwfn", "timeout": 3600},
   "fukui":    {"script": "night/sanity/fukui.py",    "item": "Fukui functions", "timeout": 1200},
   "def2":     {"script": "night/sanity/def2.py",     "item": "Basic def2 + ECP support for heavy elements", "timeout": 900},
-  "ir":       {"script": "night/sanity/ir.py",       "item": "IR spectrum from the frequency calc", "timeout": 3600}
+  "ir":       {"script": "night/sanity/ir.py",       "item": "IR spectrum from the frequency calc", "timeout": 3600},
+  "igm":      {"script": "night/sanity/igm.py",      "item": "IGM via Multiwfn export", "timeout": 1800}
  }
 }
