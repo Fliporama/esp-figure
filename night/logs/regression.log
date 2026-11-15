@@ -12,7 +12,7 @@ software: PySCF 2.15.0, RDKit 2026.09.1, NumPy 2.5.4
 wall time: 7 s
 caption: Electrostatic potential mapped onto the 0.001 a.u. electron-density isosurface, computed at the B3LYP/6-31G(d) level with PySCF 2.15.0 (lowest-energy of 50 conformers, RDKit ETKDG + MMFF94 (draft)).
 
-wrote PNGs to /tmp/tmpnja3lstx/water
+wrote PNGs to /tmp/tmp4mux_xpz/water
 ok
 input: /mnt/c/dev/esp-night/night/baseline/pam3_opt.xyz
 name: pam3_sp
@@ -25,7 +25,7 @@ SCF energy: -782.48653680 Eh (converged: True)
 surface: electron density isosurface rho = 0.001 a.u. (grid 100^3, margin 6.0 bohr), 24140 vertices
 ESP range on surface: -0.0663 to 0.0780 a.u.
 software: PySCF 2.15.0, RDKit 2026.09.1, NumPy 2.5.4
-wall time: 163 s
+wall time: 175 s
 caption: Electrostatic potential mapped onto the 0.001 a.u. electron-density isosurface, computed at the B3LYP/6-31G(d) level with PySCF 2.15.0 (geometry read from pam3_opt.xyz).
 
 PASS water_test: True (expected True ± None)

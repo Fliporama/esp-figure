@@ -142,7 +142,7 @@ next session.
 - [ ] Compare against a reference (see below), add tests, update docs
 - [x] IGM via Multiwfn export (§5), if time: `calc --igm [--igm-frags]` (2026-11-16, night; IGMH, render igm.png)
 - [x] IR spectrum from the frequency calc, if time: `calc --freq --ir` (2026-11-16, night; render ir.png)
-- [x] UV-Vis (TD-DFT): stretch: `calc --uvvis` (2026-11-16, night; **unvalidated**, no sanity check; gas, closed shell)
+- [ ] UV-Vis (TD-DFT): stretch: `calc --uvvis` built (2026-11-16, night; **unvalidated**, no sanity check, so unticked; gas, closed shell)
 
 **Validation reference:** buy one PAM3 ESP figure from a commercial service
 (~500 yuan) *with raw files* (Gaussian `.log`/`.fchk` + geometry). Run our tool

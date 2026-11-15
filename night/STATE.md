@@ -88,6 +88,11 @@
     energies = direct PySCF; f = 4.32e-9 * integral of epsilon holds. Refused with --solvent, --spin, ECP atoms. uvvis.png
     greys out wavelengths beyond the highest state and says "unvalidated". If the 6-31+G(d) SCF fails, the main results stay.
   - Queue: `pam3_uvvis` (gas baseline geometry): PAM3 timing and first look at the spectrum.
+  - Phase 3 review: regression 4/4 pass; sanity 19/19 pass incl. new `ir` and `igm`, so their roadmap ticks stand.
+    UV-Vis box **unticked** (phase 1 had ticked it without a sanity entry). `pam3_uvvis` done (exit 0, 2 h 04 min):
+    10 states all nearly dark (f <= 0.014, S1 5.45 eV), the real amide pi->pi* lies above state 10, so the 195 nm
+    "peak" in uvvis.png is a cutoff artefact; not a usable figure. Merge likely conflicts in IMPROVEMENTS.md (main's
+    `--pick` block sits next to the week-4 lines): keep both.
   - Untracked leftovers to delete by hand (night can't delete): `test_zz_probe_igm.py`, `_probe_igm.py`, `_probe_igm.txt` (Multiwfn prompt
     probe), `/root/igm_probe/` in WSL. Throwaway runs in runs/: `formamide_ir`, `formamide_uv`, `water_dimer_igm`.
 
@@ -102,6 +107,8 @@
      groups of H26...O16>` (outside the queue; --igm with PCM untested), render with the NCI view `--view=0.02,0.87,0.50`.
   3. PAM3 IR (Answers: ~1 day, day session): 222 extra SCFs on top of the Hessian; no restart inside the IR loop.
   4. Reference comparison still waits for `ref/` files.
+  5. A PAM3 UV-Vis worth showing needs more states (~30, to reach the amide pi->pi* near 190 nm) and the
+     `pam3s_fold` geometry; 10 states took 2 h, so expect several hours. Decide after the uvvis sanity check exists.
 - **Multiwfn NCI check PASSED (day, 2026-11-15)**: `/root/multiwfn` exists, so IGM (week 4 #2) is unblocked; how to drive
   Multiwfn non-interactively: `docs/multiwfn-nci-check.md`. IR sanity check locked (`night/sanity/ir.py`).
 - **Week 3: done** (charges, NCI, Fukui, def2). Day session: decide whether to test `--opt` with ECP atoms (e.g. CH3I C-I distance vs. ~2.14 Å).
