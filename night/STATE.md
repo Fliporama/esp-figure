@@ -86,6 +86,8 @@
   (`fukui_scf`); if all fail, method.txt says "Fukui: not computed" and the main results are kept. test_fukui, sanity
   fukui, test_water pass. The PAM3 rerun `pam3s_fold_q` was started by day outside the queue (log
   `runs/logs/pam3s_fold_q2.log`); do NOT queue it (the queue copies only runs/<name>, not the input run folder).
+  **DONE 2026-11-15 20:05** (40 min): both N+-1 converged from the neutral density (no fallback), <S^2> 0.753/0.755;
+  E and ESP identical to pam3s_fold; f- top: carbonyl O4 0.155, O9 0.151 (O15, H-bond acceptor, 0.074); f+ top: C13 0.137.
 - PAM3 frequencies: **DONE, do not queue again.** `pam3s_fold_freq` 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB);
   ext opt converged at step 59 (`--opt-conv qchem`, E -782.57747616, fold lower by 3.15 kcal/mol, unchanged);
   `pam3s_ext_freq` 0 imaginary (3.6 h, 2026-11-14). Both conformers are minima. The CPU is free again: the
