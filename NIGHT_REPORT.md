@@ -107,3 +107,14 @@ Changed on this branch (`git diff --stat main...HEAD`, plus this phase): `esp_fi
 `test_ir.py`, `test_igm.py`, `test_uvvis.py` (new), `IMPROVEMENTS.md`, `night/STATE.md`, `night/queue.txt`,
 `NIGHT_REPORT.md`, `night/*_result.json`, `night/logs/*`. Plain `git diff --stat main` also lists `README.md` (−88) and
 the main-only roadmap lines. Those are main's commits missing here, not night edits.
+
+
+## Uncommitted changes left in the worktree (note added by night.ps1)
+
+A Claude phase stopped without committing these (cut off mid-edit?). They are NOT on the branch; inspect them in the worktree before merging.
+
+```
+?? _probe_igm.py
+?? _probe_igm.txt
+?? test_zz_probe_igm.py
+```
