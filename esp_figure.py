@@ -24,6 +24,9 @@ OPT_CONV = {  # geomeTRIC rules, recorded in method.txt
     "qchem": "qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)",
 }
 FREQ_NOISE = 50  # cm-1; imaginary modes smaller than this are reported as likely noise (soft torsions)
+# --ir (user, 2026-11-15): scale 0.960 (NIST CCCBDB, B3LYP/6-31G*) on the plotted spectrum only; Lorentzian FWHM 10 cm-1
+IR_SCALE, IR_FWHM, IR_STEP = 0.960, 10.0, 1e-3   # IR_STEP: finite-difference step for the dipole derivatives (bohr)
+IR_KM = 974.88   # (e/sqrt(amu))^2 -> km/mol
 ORB_ISO = 0.02   # orbital isovalue (a.u.) for the HOMO/LUMO pictures, a common GaussView-like choice
 ORB_COLORS = ("#2e8b57", "#8e44ad")   # +/- phase: green/purple, so no one reads them as ESP red/blue
 ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not tint the atoms' element colours
@@ -319,7 +322,9 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None, ir=False):
+    if ir and not freq:
+        sys.exit("--ir needs --freq (intensities are projected on its normal modes)")
     if charges not in (None, "mk", "chelpg"):
         sys.exit(f"--charges must be mk or chelpg, got {charges}")
     if fukui and spin:   # ponytail: N+-1 of a radical would be singlet or triplet; not decided, so refused
@@ -354,6 +359,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         if ("optimised geometry (geomeTRIC)" in text) != opt or ("H-bond-free" in text) != no_hbond:
             sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
         if ((not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text)
+                and (not ir or ("IR intensities" in text and (out / "ir_spectrum.csv").exists()))
                 and (not charges or f"atomic charges: {'MK' if charges == 'mk' else 'CHelpG'} " in text)
                 and (not nci or ("\nNCI: " in text and (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists()))
                 and (not fukui or ("\nFukui: " in text and (out / "fukui.txt").exists()))):
@@ -540,7 +546,9 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         orb += f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
     if freq:   # analytic Hessian (incl. D3/PCM terms of mf); translations/rotations projected out, imaginary -> negative
         from pyscf.hessian import thermo
-        f = np.sort(thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)["freq_wavenumber"])
+        ha = thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)
+        order = np.argsort(ha["freq_wavenumber"])
+        f = ha["freq_wavenumber"][order]
         # The count stays raw (sanity contract); small ones are split off: soft torsions of a floppy chain give a few
         # tens of cm-1 of numerical noise (grid, loose convergence), not a saddle point.
         small = int(((f < 0) & (f > -FREQ_NOISE)).sum())
@@ -557,6 +565,36 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f" (raw count of negative harmonic modes, unscaled; {small} of them within {FREQ_NOISE} cm-1 of zero, "
                 f"likely numerical noise on soft torsions; {int((f <= -FREQ_NOISE).sum())} clearly imaginary; "
                 f"0 clearly imaginary = minimum{where})\n")
+    for k in ("ir_spectrum.csv", "ir.png"):   # method.txt is rewritten: no spectrum it doesn't describe
+        (out / k).unlink(missing_ok=True)
+    if ir:   # double-harmonic intensities: d(mu)/dx by central differences of the SCF dipole, projected on the modes
+        c0, h, ref = mol.atom_coords(), IR_STEP, mf.make_rdm1()
+        dmu = np.zeros((len(sym), 3, 3))
+        for a in range(len(sym)):
+            for k in range(3):
+                mu = []
+                for s in (1, -1):
+                    c = c0.copy()
+                    c[a, k] += s * h
+                    m = scf(mol.set_geom_(c, unit="Bohr", inplace=False), dm0=ref)
+                    if not m.converged:
+                        sys.exit(f"--ir: SCF at displaced geometry (atom {a + 1}, axis {'xyz'[k]}) did not converge")
+                    mu.append(m.dip_moment(unit="AU", verbose=0))
+                dmu[a, k] = (mu[0] - mu[1]) / (2 * h)
+        # ions: the origin term q*dR/dx drops out, since vibrations are orthogonal to translations in mass-weighted coords
+        I = IR_KM * (np.einsum("akx,iak->ix", dmu, ha["norm_mode"][order]) ** 2).sum(1)   # e^2/amu -> km/mol
+        x = np.arange(400.0, 4001.0)
+        y = sum(i * (IR_FWHM / 2) ** 2 / ((x - IR_SCALE * v) ** 2 + (IR_FWHM / 2) ** 2) for v, i in zip(f, I) if v > 0)
+        np.savetxt(out / "ir_spectrum.csv", np.c_[x, y], fmt="%.1f,%.6g", comments="",
+                   header=f"wavenumber (cm-1, scaled x {IR_SCALE:.3f}),intensity (sum of Lorentzians; peak height = band "
+                          f"intensity in km/mol where bands do not overlap)")
+        orb += (f"IR intensities (km/mol): {', '.join(f'{v:.2f}' for v in I)}\n"
+                f"IR: harmonic frequencies and double-harmonic intensities (dipole derivatives by central differences, "
+                f"step {h} bohr, {6 * len(sym)} SCFs){'; dipole of the solvated density, no cavity/local-field correction, so not comparable to gas-phase intensities (untested in PCM)' if solvent else ''}; "
+                f"scale factor {IR_SCALE:.3f} (NIST CCCBDB, B3LYP/6-31G*) applied to the plotted spectrum only, frequencies "
+                f"above unscaled; Lorentzian FWHM {IR_FWHM:g} cm-1; imaginary modes left out; ir_spectrum.csv covers "
+                f"400-4000 cm-1" + "".join(f"; band at {v:.1f} cm-1 ({i:.1f} km/mol) is below it, not plotted"
+                                           for v, i in zip(f, I) if 0 < IR_SCALE * v < 400) + "\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
     if heavy:
         disp += (f"\nbasis: {HEAVY_BASIS} + {HEAVY_BASIS} ECP on {', '.join(heavy)}, 6-31G(d) on all other atoms; ESP nuclear "
@@ -859,6 +897,24 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                      f"to +{NCI_LIM} a.u. (red, steric repulsion), interpolated across the surface; these colours are not "
                      f"ESP (blue = negative here, unlike the ESP maps)" + ("" if lobe.n_points else "; no NCI surface found")
                      + ("; default view tilted ~35 deg about the middle axis from the ESP view" if view is None else ""))
+    if (out / "ir_spectrum.csv").exists():   # wavenumber decreasing to the right, the usual IR convention
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        x, y = np.loadtxt(out / "ir_spectrum.csv", delimiter=",", skiprows=1, unpack=True)
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
+        ax.plot(x, y, color="#1f2a44", lw=1.2)
+        ax.set_xlim(4000, 400)
+        ax.set_ylim(0, y.max() * 1.08 if y.max() > 0 else 1)
+        ax.set_xlabel(f"wavenumber (cm$^{{-1}}$, scaled × {IR_SCALE:.3f})")
+        ax.set_ylabel("IR intensity (km/mol, peak height)")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="x", color="#e5e5e5", lw=0.6)
+        fig.savefig(out / "ir.png", bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        notes.append(f"ir.png: harmonic IR spectrum, frequencies scaled by {IR_SCALE:.3f}, Lorentzian FWHM {IR_FWHM:g} cm-1, "
+                     f"peak height = band intensity (km/mol) where bands don't overlap; 400-4000 cm-1 only (see the IR line "
+                     f"above for bands outside it)")
     for e in ex:
         notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}): "
                      f"{e['value']:+.4f} a.u., nearest atom {e['atom']}; "
@@ -902,6 +958,8 @@ if __name__ == "__main__":
                    help="with --nci: own NCI grid at this spacing (NCIPLOT ~0.1), atoms' box + 3 bohr; default the density grid")
     c.add_argument("--fukui", action="store_true",
                    help="condensed Fukui f+/f- (Mulliken) from UKS N+1/N-1 at the final geometry -> fukui.txt (closed shell only; two extra SCFs)")
+    c.add_argument("--ir", action="store_true",
+                   help="with --freq: IR intensities (finite-difference dipole derivatives, 6N extra SCFs) -> ir_spectrum.csv, ir.png")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -920,7 +978,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step, ir=a.ir)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
