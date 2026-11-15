@@ -41,6 +41,10 @@ CHELPG_STEP, CHELPG_SHELL = 0.3, 2.8                       # Å grid spacing; Å
 NCI_S, NCI_RHO, NCI_LIM = 0.5, 0.05, 0.04   # --nci picture: RDG isovalue, density cutoff, sign(lambda2) rho colour limit (a.u.)
 # --igm: IGMH by Multiwfn (installed by hand, docs/multiwfn-nci-check.md); grid all atoms + 3 bohr at 0.2 bohr;
 # igm.png isosurface delta-g_inter = 0.005 a.u. (Multiwfn's usual IGMH value), coloured like nci.png
+# --uvvis (user, 2026-11-15): TD-DFT, 10 singlet states, in 6-31+G(d) (ground state redone there; diffuse functions for
+# Rydberg-like states); Gaussian broadening FWHM 0.3 eV; epsilon from Gaussian's formula 1.3062974e8 * f / sigma(cm-1)
+UV_BASIS, UV_STATES, UV_FWHM = "6-31+G(d)", 10, 0.3
+EV2CM = 8065.544   # eV -> cm-1
 MULTIWFN = "/root/multiwfn/*/Multiwfn_noGUI"
 IGM_EXT, IGM_STEP, IGM_ISO = 3.0, 0.2, 0.005
 SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
@@ -347,7 +351,9 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None, ir=False, igm=False, igm_frags=None):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None, ir=False, igm=False, igm_frags=None, uvvis=False):
+    if uvvis and (solvent or spin):   # ponytail: TD-DFT with PCM and UKS TD-DFT are untested; refused for now
+        sys.exit("--uvvis is not supported yet with --solvent or --spin")
     import glob
     if igm_frags is not None and not igm:
         sys.exit("--igm-frags needs --igm")
@@ -365,6 +371,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     heavy = heavy_atoms(read_xyz(spec)[0]) if spec.endswith(".xyz") else []   # SMILES with Z > 36: refused in geometry()
     if heavy:
         level += f" + {HEAVY_BASIS}/ECP ({', '.join(heavy)})"
+    if heavy and uvvis:   # ponytail: 6-31+G(d) next to def2/ECP untested
+        sys.exit(f"--uvvis is not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
     if heavy and (nci or freq or igm):   # ponytail: ECP removes core density (fake RDG/IGM lobes); ECP Hessian untested
         sys.exit(f"--nci, --igm and --freq are not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
     if spin:   # multiplicity in the level string: caption, run cache and restart tag all tell spin states apart
@@ -390,6 +398,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
         if ((not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text)
                 and (not ir or ("IR intensities" in text and (out / "ir_spectrum.csv").exists()))
+                and (not uvvis or ("\nUV-Vis: " in text and (out / "uvvis.csv").exists()))
                 and (not igm or ("\nIGM: " in text and (out / "dg_inter.cube").exists() and (out / "igm_sl2rho.cube").exists()
                                  and (igm_frags is None or f"fragments {igm_fragments(igm_frags, *read_xyz(out / 'mol.xyz'))} " in text)
                                  and (igm_frags is not None or "; covalently bonded molecules)" in text)))
@@ -669,6 +678,36 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f"above unscaled; Lorentzian FWHM {IR_FWHM:g} cm-1; imaginary modes left out; ir_spectrum.csv covers "
                 f"400-4000 cm-1" + "".join(f"; band at {v:.1f} cm-1 ({i:.1f} km/mol) is below it, not plotted"
                                            for v, i in zip(f, I) if 0 < IR_SCALE * v < 400) + "\n")
+    for k in ("uvvis.csv", "uvvis.png"):
+        (out / k).unlink(missing_ok=True)
+    if uvvis:   # vertical singlet excitations at this geometry; ground state recomputed in the diffuse basis
+        gs = scf(gto.M(atom=[(s, tuple(r)) for s, r in zip(sym, mol.atom_coords())], unit="Bohr", charge=charge,
+                       basis=UV_BASIS.lower().replace("(d)", "*"), verbose=0))
+        if not gs.converged:   # keep the main results (as Fukui does); no uvvis.csv, so a rerun retries
+            print(f"WARNING: --uvvis: the {UV_BASIS} ground-state SCF did not converge; no UV-Vis written", file=sys.stderr)
+            orb += f"UV-Vis: not computed: the {UV_BASIS} ground-state SCF did not converge\n"
+    if uvvis and gs.converged:
+        td = gs.TDDFT()   # full TD-DFT (RPA), not Tamm-Dancoff; density fitting as in the SCF
+        td.nstates = UV_STATES
+        td.kernel()
+        ue, uf = td.e * H2EV, td.oscillator_strength(gauge="length")
+        sig = UV_FWHM / (2 * np.sqrt(np.log(2))) * EV2CM   # 1/e half-width, cm-1
+        e = np.arange(1.0, ue.max() + 1.0, 0.01)   # whole last band; render greys out what lies beyond the highest state
+        eps = sum(1.3062974e8 * b / sig * np.exp(-((e - a) * EV2CM / sig) ** 2) for a, b in zip(ue, uf))
+        np.savetxt(out / "uvvis.csv", np.c_[e, 1239.84193 / e, eps], fmt="%.3f,%.2f,%.6g", comments="",
+                   header=f"energy (eV),wavelength (nm),molar absorptivity epsilon (L mol-1 cm-1); highest computed state "
+                          f"{ue.max():.4f} eV: above it states are missing")
+        bad = int((~np.asarray(td.converged)).sum())
+        orb += (f"excitation energies (eV): {', '.join(f'{x:.4f}' for x in ue)}\n"
+                f"oscillator strengths: {', '.join(f'{x:.4f}' for x in uf)}\n"
+                f"UV-Vis: TD-DFT (full, not Tamm-Dancoff) B3LYP/{UV_BASIS}, density fitting, {UV_STATES} lowest singlet states, "
+                f"vertical at this geometry (ground state recomputed in {UV_BASIS}, E {gs.e_tot:.8f} Eh"
+                f"{' incl. D3, which does not change the excitations' if d3 else ''}; ESP and geometry stay in 6-31G(d)), "
+                f"gas phase, length-gauge oscillator strengths; Gaussian broadening FWHM {UV_FWHM} eV in energy, epsilon = "
+                f"1.3062974e8 f / sigma(cm-1) per band; only {UV_STATES} states, so the spectrum is incomplete above "
+                f"{ue.max():.2f} eV (below {1239.84193 / ue.max():.0f} nm; greyed out in uvvis.png); uvvis.csv; "
+                f"unvalidated (no locked sanity check)"
+                + (f"; WARNING: {bad} of {UV_STATES} states not converged" if bad else "") + "\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
     if heavy:
         disp += (f"\nbasis: {HEAVY_BASIS} + {HEAVY_BASIS} ECP on {', '.join(heavy)}, 6-31G(d) on all other atoms; ESP nuclear "
@@ -1005,6 +1044,28 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         notes.append(f"ir.png: harmonic IR spectrum, frequencies scaled by {IR_SCALE:.3f}, Lorentzian FWHM {IR_FWHM:g} cm-1, "
                      f"peak height = band intensity (km/mol) where bands don't overlap; 400-4000 cm-1 only (see the IR line "
                      f"above for bands outside it)")
+    if (out / "uvvis.csv").exists():
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        _, nm, eps = np.loadtxt(out / "uvvis.csv", delimiter=",", skiprows=1, unpack=True)
+        top = float(re.search(r"highest computed state (\S+) eV", (out / "uvvis.csv").read_text().splitlines()[0]).group(1))
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
+        ax.plot(nm, eps, color="#1f2a44", lw=1.2)
+        ax.set_xlim(nm.min(), nm[eps > 1e-3 * eps.max()].max() + 50 if eps.max() > 0 else nm.max())
+        ax.axvspan(nm.min(), 1239.84193 / top, color="#d9d9d9", lw=0)
+        ax.set_title(f"TD-DFT B3LYP/{UV_BASIS}, {UV_STATES} states, FWHM {UV_FWHM} eV (unvalidated); grey: higher states "
+                     f"not computed", fontsize=9,
+                     color="#555555", loc="left")
+        ax.set_ylim(0, eps.max() * 1.08 if eps.max() > 0 else 1)
+        ax.set_xlabel("wavelength (nm)")
+        ax.set_ylabel("ε (L mol$^{-1}$ cm$^{-1}$)")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="x", color="#e5e5e5", lw=0.6)
+        fig.savefig(out / "uvvis.png", bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        notes.append(f"uvvis.png: TD-DFT UV-Vis spectrum ({UV_STATES} states, {UV_BASIS}, Gaussian FWHM {UV_FWHM} eV; see the "
+                     f"UV-Vis line above); grey: wavelengths below the highest computed state, where states are missing; unvalidated")
     for e in ex:
         notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}): "
                      f"{e['value']:+.4f} a.u., nearest atom {e['atom']}; "
@@ -1054,6 +1115,8 @@ if __name__ == "__main__":
                    help="IGMH via Multiwfn (/root/multiwfn): delta-g_inter + sign(lambda2) rho cubes; render then draws igm.png")
     c.add_argument("--igm-frags", metavar="FRAGS",
                    help='with --igm: fragments, 1-based mol.xyz indices, e.g. "1-3;4-6"; default the covalently bonded molecules')
+    c.add_argument("--uvvis", action="store_true",
+                   help="TD-DFT UV-Vis (10 states, 6-31+G(d), FWHM 0.3 eV; gas phase, closed shell) -> uvvis.csv, uvvis.png")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -1072,7 +1135,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step, ir=a.ir, igm=a.igm, igm_frags=a.igm_frags)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step, ir=a.ir, igm=a.igm, igm_frags=a.igm_frags, uvvis=a.uvvis)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:
