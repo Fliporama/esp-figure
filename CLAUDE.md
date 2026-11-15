@@ -106,7 +106,11 @@ First target molecule: polyacrylamide (PAM) oligomer.
   changes from the draft in `docs/week3-sanity.md`. PAM3 `pam3s_fold_freq` and the ext opt (`--opt-conv qchem`
   from step 58) run outside the queue; logs in `runs/logs/`.
 - **Night 4 + day session 2026-11-15** (night 2026-11-13 #2 merged: MK/CHelpG `--charges`, `--nci`, `--fukui`;
-  night 2026-11-15 started 02:49 for def2, merge it in the morning). PAM3 freqs: fold and ext both 0 imaginary
+  night 2026-11-15 built def2 + ECP mixed basis, merged 712d9f7, all tests pass; week 3 done). Week-4 answers
+  are in `night/STATE.md` (IR by finite differences, scale 0.960, FWHM 10; UV-Vis 10 states, 0.3 eV, 6-31+G(d)).
+  **Next day session:** (1) Multiwfn NCI check (below) once the user has downloaded it; (2) write and lock an
+  IR sanity check (`night/sanity/ir.py`: water mode intensity order vs literature, formamide C=O strongest)
+  before the night that builds IR, else the night marks IR "unvalidated". PAM3 freqs: fold and ext both 0 imaginary
   (ext opt converged at step 59, fold still lower by 3.15 kcal/mol). NCI pictures checked by eye and fixed
   (8eb5fe3: colour bar, tilted default view, rho < 1e-4 box-corner noise dropped); `calc --nci-step 0.1`
   (f2484d0) = NCIPLOT-like own grid. Figures: `runs/water_dimer_nci{,_fine}`, `runs/pam3s_fold_nci{,_fine}`
