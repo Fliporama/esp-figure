@@ -105,6 +105,17 @@ First target molecule: polyacrylamide (PAM) oligomer.
   own NCI, Fukui via internal UKS, def2 mixed basis): `night/sanity/{charges,nci,fukui,def2}.py`, limits and
   changes from the draft in `docs/week3-sanity.md`. PAM3 `pam3s_fold_freq` and the ext opt (`--opt-conv qchem`
   from step 58) run outside the queue; logs in `runs/logs/`.
+- **Night 4 + day session 2026-11-15** (night 2026-11-13 #2 merged: MK/CHelpG `--charges`, `--nci`, `--fukui`;
+  night 2026-11-15 started 02:49 for def2, merge it in the morning). PAM3 freqs: fold and ext both 0 imaginary
+  (ext opt converged at step 59, fold still lower by 3.15 kcal/mol). NCI pictures checked by eye and fixed
+  (8eb5fe3: colour bar, tilted default view, rho < 1e-4 box-corner noise dropped); `calc --nci-step 0.1`
+  (f2484d0) = NCIPLOT-like own grid. Figures: `runs/water_dimer_nci{,_fine}`, `runs/pam3s_fold_nci{,_fine}`
+  (`--view=0.02,0.87,0.50 --hbonds`; H26···O16 lobe −0.030 a.u., vdW patches green, no red).
+  **Open: Multiwfn check of NCI on the water dimer.** The site has a CAPTCHA, so the user downloads the
+  Linux noGUI zip by hand into Windows Downloads. Then: unzip to `/root/multiwfn` (outside the repo);
+  wavefunction ready at `runs/multiwfn_check/water_dimer.molden` (same SCF as `calc`, E −152.82371656);
+  Multiwfn fn 5 RDG + sign(λ2)ρ on the grid of `runs/water_dimer_nci_fine/rdg.cube`; pass = s within 1 %,
+  sl2rho within 1e-3, H-bond lobe min −0.0263 a.u. Then tick the Multiwfn part in IMPROVEMENTS.md.
 
 ## This machine
 
