@@ -88,7 +88,7 @@
     energies = direct PySCF; f = 4.32e-9 * integral of epsilon holds. Refused with --solvent, --spin, ECP atoms. uvvis.png
     greys out wavelengths beyond the highest state and says "unvalidated". If the 6-31+G(d) SCF fails, the main results stay.
   - Queue: `pam3_uvvis` (gas baseline geometry): PAM3 timing and first look at the spectrum.
-  - Untracked leftovers to delete by hand (night can't delete): `test_zz_probe_igm.py`, `_probe_igm.txt` (Multiwfn prompt
+  - Untracked leftovers to delete by hand (night can't delete): `test_zz_probe_igm.py`, `_probe_igm.py`, `_probe_igm.txt` (Multiwfn prompt
     probe), `/root/igm_probe/` in WSL. Throwaway runs in runs/: `formamide_ir`, `formamide_uv`, `water_dimer_igm`.
 
 ## Skipped (waiting on you)
