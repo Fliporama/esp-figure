@@ -207,8 +207,9 @@ powershell -ExecutionPolicy Bypass -File night\night.ps1 -StopBy 04:00
 
 ## Open questions for the user
 
-- Exact structure for the final figures (end groups, ester end, crosslinker)?
-- Do figures need to match a journal or report style (size, font, DPI)?
+- ~~Exact structure for the final figures?~~ Answered 2026-11-15: the H-capped syndiotactic trimer, as now (no
+  longer oligomer, end groups or crosslinker).
+- ~~Journal or report style?~~ Answered 2026-11-15: no, keep the default (1600×1000 PNG).
 
 ## Working preferences
 

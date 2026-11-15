@@ -87,6 +87,18 @@ def read_cube(path):
     return g
 
 
+def fukui_scf(scf, mol, dm0):
+    """N+-1 UKS for Fukui: start from the neutral density (half per spin), then a level shift, then second-order SCF,
+    each continuing from the last density. The default atomic guess failed for the PAM3 cation in PCM (2026-11-15)."""
+    f = scf(mol, dm0)
+    if f.converged:
+        return f, "neutral-density start"
+    f = scf(mol, f.make_rdm1(), level_shift=0.3)
+    if f.converged:
+        return f, "neutral-density start, level shift 0.3"
+    return scf(mol, f.make_rdm1(), second_order=True), "neutral-density start, level shift 0.3, second-order SCF"
+
+
 def hbond_pairs(m, xyz):
     """Intramolecular H-bonds as (H index, acceptor index): H on N/O within HB_CUT of an N/O more than
     3 bonds away (i.e. not its own amide O)."""
@@ -383,16 +395,19 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     build = lambda x, q=charge, s=spin: gto.M(atom=[(a, tuple(map(float, r))) for a, r in zip(sym, x)], charge=q, spin=s,
                                               basis=basis, ecp=ecp, verbose=0)
 
-    def scf(mol):
+    def scf(mol, dm0=None, level_shift=0, second_order=False):
         mf = (dft.UKS if mol.spin else dft.RKS)(mol).density_fit()
         mf.xc = "b3lyp"
+        mf.level_shift = level_shift
         if d3:
             mf.disp = "d3bj"   # pip install pyscf-dispersion; post-SCF energy term, density and ESP unchanged
         if solvent:            # IEF-PCM: polarises the density, so it changes energy, geometry (with --opt) and ESP
             mf = mf.PCM()
             mf.with_solvent.method = "IEF-PCM"
             mf.with_solvent.eps = SOLVENTS[solvent]
-        mf.kernel()
+        if second_order:
+            mf = mf.newton()
+        mf.kernel(dm0)
         return mf
 
     if rerank and not done:
@@ -492,12 +507,19 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f"total charge, no restraints, so not RESP; charges.txt)\nESP fit RRMS: {rrms:.4f}\n")
     (out / "fukui.txt").unlink(missing_ok=True)
     if fukui:   # vertical N+1 / N-1 doublets at this geometry, same level; condensed with Mulliken populations
-        q0, qi, s2 = mf.mulliken_pop(verbose=0)[1], {}, {}
+        q0, qi, s2, how, bad = mf.mulliken_pop(verbose=0)[1], {}, {}, {}, []
+        d0 = mf.make_rdm1() / 2
         for dq, k in ((-1, "N+1"), (1, "N-1")):   # charge -1 = N+1 electrons (anion); keep only populations, not the SCF
-            f = scf(build(xyz, charge + dq, 1))
-            if not f.converged:   # exit before method.txt: the run is not cached, a rerun recomputes
-                sys.exit(f"--fukui: the {k} (charge {charge + dq}) UKS SCF did not converge; no Fukui values written")
+            f, how[k] = fukui_scf(scf, build(xyz, charge + dq, 1), np.array((d0, d0)))   # array: PCM rejects a tuple
+            if not f.converged:
+                bad.append(f"{k} (charge {charge + dq})")
+                continue
             qi[k], s2[k] = f.mulliken_pop(verbose=0)[1], f.spin_square()[0]
+    if fukui and bad:   # keep the main results; no fukui.txt, so the run is not cached as done and a rerun retries
+        print(f"WARNING: --fukui: the {' and '.join(bad)} UKS SCF did not converge; no Fukui values written", file=sys.stderr)
+        orb += (f"Fukui: not computed: the {' and '.join(bad)} UKS SCF did not converge (tried: start from the neutral "
+                f"density, then level shift 0.3, then second-order SCF)\n")
+    elif fukui:
         fp, fm = q0 - qi["N+1"], qi["N-1"] - q0   # p = Z - q
         (out / "fukui.txt").write_text(f"# condensed Fukui functions (Mulliken), {level}; atom index (0-based, mol.xyz order), "
                                        "element, f+ (nucleophilic attack), f- (electrophilic attack); Mulliken-condensed "
@@ -508,7 +530,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         if cont:
             print(f"WARNING: Fukui {' and '.join(cont)} <S^2> off by > 10 %: spin contamination", file=sys.stderr)
         orb += (f"Fukui: f+ = p(N+1) - p(N), f- = p(N) - p(N-1), Mulliken-condensed; N+-1 as UKS doublets at this geometry "
-                f"(vertical, same level), <S^2> {s2['N+1']:.4f} (N+1) / {s2['N-1']:.4f} (N-1), pure doublet 0.7500"
+                f"(vertical, same level; SCF: {how['N+1']} (N+1) / {how['N-1']} (N-1)), <S^2> {s2['N+1']:.4f} (N+1) / {s2['N-1']:.4f} (N-1), pure doublet 0.7500"
                 f"{'; WARNING: spin contamination > 10 % in ' + ' and '.join(cont) if cont else ''}; f+ is basis-limited "
                 f"(6-31G(d) has no diffuse functions, so the anion's extra electron is squeezed onto the molecule); fukui.txt\n")
     if orbitals:   # closed-shell RKS: HOMO = nelectron//2 - 1; same grid as the density cube

@@ -81,12 +81,11 @@
 - **Week 4 (day, 2026-11-15): IR and IGM have locked sanity checks** (`night/sanity/{ir,igm}.py`, `docs/week4-sanity.md`):
   build IR first, then IGM (IGMH via Multiwfn, menu path in the igm.py docstring and `docs/multiwfn-nci-check.md`).
   UV-Vis: no sanity check yet; build only after IR and IGM pass, marked "unvalidated". Reference comparison: `ref/` empty, skip.
-- **Fukui fails on PAM3 in water (found 2026-11-15)**: `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_q --d3 --solvent
-  water --charges mk --fukui` ran 63 min, then "the N-1 (charge 1) UKS SCF did not converge" and exited WITHOUT
-  method.txt although the MK charges were finished (charges.txt written, run not cached). Fix in code (small, test on
-  formamide): (1) start the N+1/N-1 UKS from the neutral density (dm0 = neutral dm/2 per spin) with a level shift /
-  second-order fallback (`newton()`) before giving up; (2) a failed extra analysis must not discard the main results:
-  write method.txt with "Fukui: not converged (N-1)" instead of exiting. Then queue that command (~1.5 h).
+- **Fukui on PAM3 in water: FIXED by day 2026-11-15, do not touch.** The N-1 UKS SCF had not converged and the run exited
+  without method.txt. Now: N+-1 start from the neutral density, then level shift 0.3, then second-order SCF
+  (`fukui_scf`); if all fail, method.txt says "Fukui: not computed" and the main results are kept. test_fukui, sanity
+  fukui, test_water pass. The PAM3 rerun `pam3s_fold_q` was started by day outside the queue (log
+  `runs/logs/pam3s_fold_q2.log`); do NOT queue it (the queue copies only runs/<name>, not the input run folder).
 - PAM3 frequencies: **DONE, do not queue again.** `pam3s_fold_freq` 0 imaginary (lowest 33.2 cm-1; 5.5 h, 9.9 GB);
   ext opt converged at step 59 (`--opt-conv qchem`, E -782.57747616, fold lower by 3.15 kcal/mol, unchanged);
   `pam3s_ext_freq` 0 imaginary (3.6 h, 2026-11-14). Both conformers are minima. The CPU is free again: the
