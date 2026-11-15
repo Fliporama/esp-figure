@@ -116,7 +116,8 @@ next session.
   3.15 kcal/mol in water + D3, vs. 6.3 in gas; ext opt stopped at step 58, see CLAUDE.md)
 
 **Week 2: credibility + presentation**
-- [x] Frequency check, confirm minimum (§4): `calc --freq` (2026-11-13, night; PAM3 runs not queued yet)
+- [x] Frequency check, confirm minimum (§4): `calc --freq` (2026-11-13, night). PAM3 in water + D3: fold and ext
+  both 0 imaginary (`pam3s_{fold,ext}_freq`, 5.5 h / 3.6 h, ~10 GB RAM; 2026-11-13/14)
 - [x] HOMO/LUMO surfaces (§4): `calc --orbitals`, render writes homo.png/lumo.png (2026-11-12)
 - [x] ESP min/max markers on the map (§4): `render --extrema` (2026-11-11)
 - [x] H-bonds as dashed lines (`render --hbonds`, 2026-11-11), double bonds as double sticks (`bond_list`, 2026-11-12) (§4)
@@ -124,7 +125,8 @@ next session.
 
 **Week 3: analyses**
 - [x] MK/CHelpG charges (§4): `calc --charges mk|chelpg` (2026-11-13, night)
-- [x] RDG/NCI plots, own code (§5): `calc --nci`, render `nci.png` (2026-11-13, night; Multiwfn check still open)
+- [x] RDG/NCI plots, own code (§5): `calc --nci`, render `nci.png` (2026-11-13, night). Pictures checked by eye and
+  fixed 2026-11-15; `--nci-step 0.1` for figures. **Multiwfn check still open** (waiting on a manual download)
 - [x] Fukui functions (§5, needs UKS): `calc --fukui`, Mulliken-condensed (2026-11-13, night)
 - [ ] Basic def2 + ECP support for heavy elements (`.xyz` input; MMFF has no metals)
 
@@ -163,6 +165,23 @@ give better-documented PAM figures than the paid service.
   fold view; ext's pick is fine but no better than its default.
 - Comparison figure done 2026-11-12: `esp_figure.py panel A B --labels ...` (shared colour bar, refuses
   different limits, ΔE only at one level of theory, writes <out>.txt).
+
+## Found 2026-11-15
+
+- ~~Ext optimisation unconverged~~ done 2026-11-13: resumed from step 58 with `--opt-conv qchem`, converged at
+  step 59 (E −782.57747616, 0.0001 kcal/mol below the step-58 single point): fold lower by 3.15 kcal/mol stands.
+- ~~NCI picture flaws~~ fixed 2026-11-15 (8eb5fe3), found by looking at it, which no check did:
+  colour bar title clipped and bar over the molecule; H-bond disc seen edge-on (default view now tilted ~35°
+  about the middle axis, long axis kept horizontal); a spurious lobe at the box corner where rho ~ 0
+  (s = |grad rho|/rho^(4/3) is noise there) that also wrecked the camera framing (now rho < 1e-4 dropped).
+  Lesson: a sanity check "PNG exists" doesn't check a picture; look at every new picture type once.
+- ~~NCI grid coarse~~ done 2026-11-15 (f2484d0): `--nci-step BOHR` gives NCI its own grid (atoms' box + 3 bohr).
+  PAM3 at 0.1 bohr: 237x149x157, 28 min; H-bond lobe −0.0299 vs −0.0295 a.u. on the density grid, same lobes,
+  smooth instead of blocky. Default `--nci` still uses the density grid (locked sanity contract).
+- No automatic NCI view: PAM3 needed a hand-picked `--view` (H-bond lobe hidden behind a vdW lobe in the
+  ESP view). `--view auto` scores ESP features, not NCI lobes.
+- Basis convention: PySCF 6-31G(d) uses 5 spherical d; Gaussian's default is 6 Cartesian d. Matters for the
+  week-4 comparison against Gaussian files (energies differ by ~mEh); use `cart=True` or Gaussian `5D` there.
 
 ## Notes / lessons
 
