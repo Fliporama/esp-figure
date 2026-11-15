@@ -5,7 +5,9 @@ what the paper claims. Add new items as they come up; mark done with a date.
 
 ## 1. Fix first
 
-### Tacticity is undefined in the SMILES (found 2026-11-10)
+### Tacticity is undefined in the SMILES (found 2026-11-10) — **FIXED 2026-11-11**
+Syndiotactic SMILES in `esp_figure.PAM3`; unspecified-stereo SMILES are refused (Roadmap week 1).
+
 The PAM3 SMILES `CC(C(N)=O)CC(C(N)=O)CC(C)C(N)=O` has no `@`/`@@`, so RDKit
 gives each embedded conformer a random configuration at each stereocentre.
 Of the 50 conformers: 4 different stereoisomers (16 / 13 / 13 / 8).
@@ -22,14 +24,16 @@ different shapes.
 
 ## 2. Worth doing for the paper
 
+All three **done** (see Roadmap week 1; folded vs. extended redone with them 2026-11-12, folded lower by 3.15 kcal/mol).
+
 | Change | Why | Cost |
 |---|---|---|
-| Implicit water: `mf.PCM()` or `mf.ddCOSMO()` (PySCF), during opt and ESP | PAM is used in water. Gas phase over-favours intramolecular N–H···O H-bonds (why the conformer search folds). Solvent polarisation also slightly enlarges ESP extremes | ~1.5–2× time |
-| Dispersion: B3LYP-D3(BJ) (`pip install simple-dftd3` or `dftd3`) | Plain B3LYP lacks dispersion → folded vs. extended energies are biased (compact shapes under-bound). Without it, energy differences are qualitative only | ~free |
-| Re-rank conformers with DFT, not MMFF | MMFF over-weights intramolecular H-bonds. Take top 5–10 MMFF conformers, B3LYP(-D3) single point each (~2 min), optimise the best | +10–20 min |
+| **DONE 2026-11-12** (`--solvent water`, IEF-PCM). Implicit water: `mf.PCM()` or `mf.ddCOSMO()` (PySCF), during opt and ESP | PAM is used in water. Gas phase over-favours intramolecular N–H···O H-bonds (why the conformer search folds). Solvent polarisation also slightly enlarges ESP extremes | ~1.5–2× time |
+| **DONE 2026-11-11** (`--d3`, off by default). Dispersion: B3LYP-D3(BJ) (`pip install simple-dftd3` or `dftd3`) | Plain B3LYP lacks dispersion → folded vs. extended energies are biased (compact shapes under-bound). Without it, energy differences are qualitative only | ~free |
+| **DONE 2026-11-12** (`--rerank N`). Re-rank conformers with DFT, not MMFF | MMFF over-weights intramolecular H-bonds. Take top 5–10 MMFF conformers, B3LYP(-D3) single point each (~2 min), optimise the best | +10–20 min |
 
 Proposed CLI: `calc ... --solvent water` and D3 on by default (record both in
-method.txt).
+method.txt). Built as `--solvent water` and `--d3`; D3 stays off by default (user, 2026-11-11, see STATE Answers).
 
 ## 3. Optional / diminishing returns
 
@@ -45,34 +49,36 @@ method.txt).
 ## 4. Gaps vs. Gaussian + GaussView (added 2026-11-11)
 
 Most of these are already in PySCF or PyVista and just need wiring into `esp_figure.py`.
+Status (2026-11-15): every item marked **DONE** is built and ticked in the Roadmap below; the rest are open.
 
 **Matter for an ESP paper**
-- Frequency check (Gaussian `opt freq`): proves the optimised geometry is a
+- **DONE 2026-11-13** (`--freq`; PAM3 fold and ext 0 imaginary). Frequency check (Gaussian `opt freq`): proves the optimised geometry is a
   minimum (no imaginary modes). Reviewers expect it. PySCF: `mf.Hessian()` +
   `pyscf.hessian.thermo`; ~1 h for PAM3.
-- Restart / checkpoint (`.chk`): a crashed 1 h opt is lost now. Save the
+- **DONE 2026-11-12** (`opt_traj.xyz`). Restart / checkpoint (`.chk`): a crashed 1 h opt was lost. Save the
   geomeTRIC trajectory or last geometry and allow restart from it.
-- ESP-fitted charges (MK, CHelpG) and Mulliken: Mulliken is built in;
+- **DONE 2026-11-13** (`--charges mk|chelpg`). ESP-fitted charges (MK, CHelpG) and Mulliken: Mulliken is built in;
   MK/CHelpG need ~30 lines (fit to ESP on shells) or an extension. NBO is not
   free (Gaussian bundles NBO 3); IAO/IBO charges in PySCF are a free alternative.
-- HOMO/LUMO isosurfaces: often shown next to ESP maps. PySCF `cubegen.orbital`
+- **DONE 2026-11-12** (`--orbitals`). HOMO/LUMO isosurfaces: often shown next to ESP maps. PySCF `cubegen.orbital`
   + the same render path.
-- H-bonds drawn as dashed lines; double bonds drawn as double sticks.
+- **DONE 2026-11-12** (`render --hbonds`, `bond_list`). H-bonds drawn as dashed lines; double bonds drawn as double sticks.
 
 **Nice to have**
 - Interactive view to pick the camera, then print the `--view` vector.
 - Surface style options: opacity, solid vs. mesh.
 - Atom labels / numbering.
-- Open-shell molecules (spin multiplicity, UKS): only closed-shell RKS now.
-- Spectra (IR/Raman, UV-Vis via TD-DFT): PySCF can; out of scope for ESP figures.
+- **DONE 2026-11-13** (`--spin N`, .xyz input). Open-shell molecules (spin multiplicity, UKS): was closed-shell RKS only.
+- Spectra (IR/Raman, UV-Vis via TD-DFT): PySCF can. IR and UV-Vis are now on the Roadmap (week 4; IR sanity check locked 2026-11-15).
 
 **Beyond GaussView (Multiwfn territory)**
-- ESP surface extrema (V_s,min / V_s,max) marked on the map, plus quantitative
+- **Markers DONE 2026-11-11** (`render --extrema`; surface statistics still open). ESP surface extrema (V_s,min / V_s,max) marked on the map, plus quantitative
   surface statistics. Cheap here, since ESP is already at every vertex.
 
 ## 5. Extra analyses (added 2026-11-11, seen on commercial QC service listings)
 
-- **Weak-interaction plots (RDG / NCI, IGM)**: isosurfaces that show where
+- **NCI DONE 2026-11-13** (own code, checked against Multiwfn 2026-11-15); **IGM open** (sanity check locked
+  2026-11-15). **Weak-interaction plots (RDG / NCI, IGM)**: isosurfaces that show where
   H-bonds (blue), van der Waals contacts (green) and steric clashes (red) sit.
   Directly useful for the folded vs. extended PAM3 comparison, since they make
   the N–H···O H-bonds visible.
@@ -86,7 +92,7 @@ Most of these are already in PySCF or PyVista and just need wiring into `esp_fig
   - Cheapest route: export molden → Multiwfn → cube → render the isosurface
     with our PyVista code. Writing RDG ourselves is ~40 lines if we'd rather
     avoid the external tool.
-- **Fukui functions** (f⁺, f⁻, f⁰): predict sites for nucleophilic or
+- **DONE 2026-11-13** (`--fukui`; PAM3 in water run 2026-11-15). **Fukui functions** (f⁺, f⁻, f⁰): predict sites for nucleophilic or
   electrophilic attack, from densities of the N, N+1 and N−1 electron systems
   at the same geometry: f⁺ = ρ(N+1) − ρ(N), f⁻ = ρ(N) − ρ(N−1).
   - Two extra SCFs (charge −1 and +1; open-shell, so needs UKS, see section 4).
