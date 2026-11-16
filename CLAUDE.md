@@ -147,8 +147,21 @@ First target molecule: polyacrylamide (PAM) oligomer.
   **Solvent dominates, not the basis.** Their report mixes colour conventions (VMD panels red = positive).
   Acrylamide runs: `runs/acrylamide` (gas, `--opt --rerank 2`, s-cis, s-trans +1.8 kcal/mol, ESP −0.068/+0.073) and
   `runs/acrylamide_w` (`--d3 --solvent water`, s-cis, ESP −0.0860/+0.0939, rendered `--limit 0.10,0.05`); at the
-  vendor level on our geometry −59.73/+66.59 vs their −59.86/+66.28 kcal/mol. Open: SMD option and/or bigger ESP
-  basis (IMPROVEMENTS "Found 2026-11-12" list); not decided.
+  vendor level on our geometry −59.73/+66.59 vs their −59.86/+66.28 kcal/mol.
+- **Built later that day (64b1ba6):** `calc --ref-level` = one PBE0-D3(BJ)/6-311+G(d,p) (+SMD with `--solvent`) single
+  point for surface/ESP/charges/orbitals/NCI/Fukui/IGM; geometry, `--freq`, `--ir`, `--uvvis` stay at the run's level;
+  refused for Br (no basis in PySCF), ECP atoms, `--spin`. `test_reflevel.py`: via `calc`, acrylic acid −43.80/+61.75
+  vs Gaussian −43.65/+62.01 kcal/mol (its Gaussian part needs the local `ref/esp-20260212/`). Multiwfn path: env
+  `MULTIWFN`. `prototype/` deleted. 12 regression tests, test_igm, 19/19 sanity pass.
+- **Next (user to choose, 2026-11-16):** (1) PAM3 fold + ext at `--ref-level` in water on the existing geometries
+  (`calc runs/pam3s_fold/mol.xyz --name pam3s_fold_ref --d3 --solvent water --ref-level`, same for ext; not run yet,
+  time unmeasured, guess 1–2 h each; the "~5x" in the `--ref-level` help is a guess too); (2) label all local ESP
+  extrema like Multiwfn (vendor's yellow/cyan balls; `render --extrema` marks only the global min/max), testable
+  against the vendor acrylic acid extrema in `ref/esp-20260212/surfanalysise.pdb`. Advice given, not built: no GUI;
+  for non-technical users one Colab notebook later. Stearyl acrylate: gas phase only (insoluble in water), hand-built
+  all-trans `.xyz`, too big for Colab/`--freq`; butyl acrylate is the cheap head-group model. Bigger molecules will
+  go to the lab computer (specs pending: OS, cores, RAM, disk, NVIDIA GPU for gpu4pyscf). Night runner: roadmap has
+  nothing buildable (UV-Vis waits for a day-made sanity check, view picker is day-only), so a night now only reruns checks.
 
 ## This machine
 
