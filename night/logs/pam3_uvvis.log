@@ -1,0 +1,17 @@
+input: night/baseline/pam3_opt.xyz
+name: pam3_uvvis
+charge: 0
+atoms: 35
+geometry: geometry read from pam3_opt.xyz
+intramolecular H-bonds in final geometry (H···N/O < 2.5 Å): n/a
+level of theory: B3LYP/6-31G(d), density fitting (PySCF default auxiliary basis); ESP integrals exact
+SCF energy: -782.48653680 Eh (converged: True)
+surface: electron density isosurface rho = 0.001 a.u. (grid 100^3, margin 6.0 bohr), 24140 vertices
+ESP range on surface: -0.0663 to 0.0780 a.u.
+excitation energies (eV): 5.4477, 5.5167, 5.5918, 5.8880, 6.0708, 6.0827, 6.2341, 6.2968, 6.3785, 6.4172
+oscillator strengths: 0.0014, 0.0013, 0.0013, 0.0022, 0.0008, 0.0033, 0.0002, 0.0073, 0.0136, 0.0047
+UV-Vis: TD-DFT (full, not Tamm-Dancoff) B3LYP/6-31+G(d), density fitting, 10 lowest singlet states, vertical at this geometry (ground state recomputed in 6-31+G(d), E -782.52522382 Eh; ESP and geometry stay in 6-31G(d)), gas phase, length-gauge oscillator strengths; Gaussian broadening FWHM 0.3 eV in energy, epsilon = 1.3062974e8 f / sigma(cm-1) per band; only 10 states, so the spectrum is incomplete above 6.42 eV (below 193 nm; greyed out in uvvis.png); uvvis.csv; unvalidated (no locked sanity check)
+software: PySCF 2.15.0, RDKit 2026.09.1, NumPy 2.5.4
+wall time: 7431 s
+caption: Electrostatic potential mapped onto the 0.001 a.u. electron-density isosurface, computed at the B3LYP/6-31G(d) level with PySCF 2.15.0 (geometry read from pam3_opt.xyz).
+

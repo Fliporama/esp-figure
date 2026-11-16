@@ -71,10 +71,44 @@
   - Phase 3 review: regression 4/4 pass; sanity 17/17 pass incl. `def2`, so the roadmap tick stands. Branch is 2 commits
     behind main (`8eb5fe3`, `f2484d0`, NCI render / `--nci-step`); hunks don't overlap by inspection.
 
+- Night 2026-11-16 (code + fast tests; `ir`/`igm` sanity run after this phase; all defaults unchanged, test_water passes):
+  - IR `calc --freq --ir` (`test_ir.py`): dipole derivatives by central differences (1e-3 bohr, 6N SCFs at the run's level),
+    projected on PySCF's `norm_mode`, 974.88 km/mol per e^2/amu. Water 79.99/1.80/20.38 km/mol (ref 79.6/1.8/20.1), formamide
+    C=O 1842.2 cm-1 strongest (366 km/mol). `ir_spectrum.csv` 400-4000 cm-1 (scaled 0.960, Lorentzian FWHM 10, peak height =
+    km/mol); bands below 400 cm-1 named in method.txt (formamide NH2 wag 64 cm-1, 265 km/mol). `ir.png` checked by eye.
+    With --solvent: runs, flagged "not comparable to gas phase, untested". `--ir` on an existing --freq run recomputes the
+    Hessian too (no reuse); PAM3 IR stays a day-session job (Answers week 4 #3), not queued.
+  - IGM `calc --igm [--igm-frags "1-3;4-6"]` (`test_igm.py`): Multiwfn noGUI 20 -> 11 (IGMH), grid atoms + 3 bohr (Multiwfn
+    rounds: dimer reach 2.85 bohr) at 0.2 bohr. Water dimer integral 0.085547 (ref 0.0856), max on H...O, sl2rho < -0.015;
+    fragments auto = covalent molecules, swapped fragments give the same integral; bonded fragments get a WARNING.
+    Refused with --spin (UKS molden untested) and ECP atoms. Untested: --solvent, --opt. `igm.png` (water dimer) checked by eye:
+    blue-centred H-bond disc. PAM3 IGM not queued: it needs runs/pam3s_fold/mol.xyz, which the queue doesn't copy.
+  - UV-Vis `calc --uvvis` (`test_uvvis.py`), **unvalidated: needs a sanity check**: full TD-DFT, 10 singlets, ground state
+    redone in 6-31+G(d), Gaussian FWHM 0.3 eV, epsilon by Gaussian's formula. Formaldehyde S1 4.005 eV (n->pi*, f 0.0000);
+    energies = direct PySCF; f = 4.32e-9 * integral of epsilon holds. Refused with --solvent, --spin, ECP atoms. uvvis.png
+    greys out wavelengths beyond the highest state and says "unvalidated". If the 6-31+G(d) SCF fails, the main results stay.
+  - Queue: `pam3_uvvis` (gas baseline geometry): PAM3 timing and first look at the spectrum.
+  - Phase 3 review: regression 4/4 pass; sanity 19/19 pass incl. new `ir` and `igm`, so their roadmap ticks stand.
+    UV-Vis box **unticked** (phase 1 had ticked it without a sanity entry). `pam3_uvvis` done (exit 0, 2 h 04 min):
+    10 states all nearly dark (f <= 0.014, S1 5.45 eV), the real amide pi->pi* lies above state 10, so the 195 nm
+    "peak" in uvvis.png is a cutoff artefact; not a usable figure. Merge likely conflicts in IMPROVEMENTS.md (main's
+    `--pick` block sits next to the week-4 lines): keep both.
+  - Untracked leftovers to delete by hand (night can't delete): `test_zz_probe_igm.py`, `_probe_igm.py`, `_probe_igm.txt` (Multiwfn prompt
+    probe), `/root/igm_probe/` in WSL. Throwaway runs in runs/: `formamide_ir`, `formamide_uv`, `water_dimer_igm`.
+
 ## Skipped (waiting on you)
 - (none; the four week-4 questions are answered under Answers, 2026-11-15)
 
 ## Next
+- **Week 4 built (2026-11-16 night)**: IR, IGM, UV-Vis. Open for a day session:
+  1. A UV-Vis sanity check (suggestion: formaldehyde S1 n->pi* dark near 4 eV; a pi->pi* reference, e.g. ethylene or
+     benzene vs. a literature TD-B3LYP value; peak-height and integral checks of uvvis.csv).
+  2. PAM3 IGM in water: `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_igm --d3 --solvent water --igm --igm-frags <amide
+     groups of H26...O16>` (outside the queue; --igm with PCM untested), render with the NCI view `--view=0.02,0.87,0.50`.
+  3. PAM3 IR (Answers: ~1 day, day session): 222 extra SCFs on top of the Hessian; no restart inside the IR loop.
+  4. Reference comparison still waits for `ref/` files.
+  5. A PAM3 UV-Vis worth showing needs more states (~30, to reach the amide pi->pi* near 190 nm) and the
+     `pam3s_fold` geometry; 10 states took 2 h, so expect several hours. Decide after the uvvis sanity check exists.
 - **Multiwfn NCI check PASSED (day, 2026-11-15)**: `/root/multiwfn` exists, so IGM (week 4 #2) is unblocked; how to drive
   Multiwfn non-interactively: `docs/multiwfn-nci-check.md`. IR sanity check locked (`night/sanity/ir.py`).
 - **Week 3: done** (charges, NCI, Fukui, def2). Day session: decide whether to test `--opt` with ECP atoms (e.g. CH3I C-I distance vs. ~2.14 Å).

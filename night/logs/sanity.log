@@ -60,8 +60,8 @@ PASS uks (Open-shell UKS)
 PASS optconv (Optimisation convergence --opt-conv qchem)
   PASS default run names its rule (gau): gau (geomeTRIC default, Gaussian-like: energy 1e-6 Eh, gradient rms/max 3e-4/4.5e-4, displacement rms/max 1.2e-3/1.8e-3, all five)
   PASS qchem run names its rule: qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)
-  PASS qchem takes no more steps: 7 vs 7
-  PASS same minimum within 1e-5 Eh: -169.88541847 vs -169.88541847
+  PASS qchem stops earlier on a soft torsion: 4 vs 5
+  PASS same minimum within 1e-6 Eh: -158.45543436 vs -158.45543457
 PASS charges (MK/CHelpG charges)
   PASS water_mk: one charge per atom, mol.xyz order: ['O', 'H', 'H'] vs ['O', 'H', 'H']
   PASS water_mk: method.txt names the scheme: 
@@ -96,7 +96,7 @@ PASS fukui (Fukui functions)
   PASS formaldehyde: f+ on C and O each above every H: f+ [('C', np.float64(0.278)), ('O', np.float64(0.274)), ('H', np.float64(0.224)), ('H', np.float64(0.224))]
   PASS formaldehyde: f- largest on O: f- {'C': np.float64(0.065), 'O': np.float64(0.434), 'H': np.float64(0.25)}
   PASS method.txt flags f+ as basis-limited: 
-  PASS formamide: f- largest on O or N: f- [('N', np.float64(0.259)), ('C', np.float64(0.044)), ('O', np.float64(0.29)), ('H', np.float64(0.13)), ('H', np.float64(0.117)), ('H', np.float64(0.16))]
+  PASS formamide: f- largest on O or N: f- [('N', np.float64(0.065)), ('C', np.float64(0.076)), ('O', np.float64(0.419)), ('H', np.float64(0.111)), ('H', np.float64(0.093)), ('H', np.float64(0.235))]
   PASS fukui with spin > 0 refused: --fukui needs a closed-shell molecule (--spin 0): N+1 and N-1 are then doublets
 PASS def2 (Basic def2 + ECP support for heavy elements)
   PASS CH3I energy matches direct PySCF (mixed basis + ECP): -337.70445097 vs -337.70445096
@@ -107,3 +107,24 @@ PASS def2 (Basic def2 + ECP support for heavy elements)
   PASS CH3I renders: 
   PASS HBr unchanged (no def2): B3LYP/6-31G(d), density fitting (PySCF default auxiliary bas
   PASS SMILES CI refused with a clear message: unsupported element(s) I: MMFF94 + 6-31G(d) cover only Br, C, Cl, F, H, N, O, P, S, Si; elements with Z > 36 (def2-SVP + ECP) need .xyz input
+PASS ir (IR spectrum from the frequency calc)
+  PASS water: 3 intensities >= 0: [79.99, 1.8, 20.38]
+  PASS water: bend > asym > sym: bend 79.99, sym 1.8, asym 20.38
+  PASS water: within 15 % of reference: [79.99, 1.8, 20.38] vs [79.6, 1.8, 20.1]
+  PASS method.txt IR line: IR: harmonic frequencies and double-harmonic intensities (dipole derivatives by central differences, step 0.001 bohr, 18 SCFs); scale factor 0.960 (NIST CCCBDB, B3LYP/6-31G*) applied to the plotted spectrum only, frequencies above unscaled; Lorentzian FWHM 10 cm-1; imaginary modes left out; ir_spectrum.csv covers 400-4000 cm-1
+  PASS spectrum grid: 400.0..4000.0
+  PASS bend peak at 0.960 x raw: peak 1642.0, 0.960 x 1710.9 = 1642.5
+  PASS Lorentzian FWHM 10 (tail at +15 cm-1): 0.106 of peak
+  PASS formamide: strongest band is C=O (raw 1700-1900): strongest at 1842.2 cm-1; [265.29, 12.44, 20.22, 0.21, 3.72, 101.32, 0.76, 63.84, 365.53, 122.41, 24.35, 31.23]
+  PASS methane: 3 inactive (< 0.1), 6 active (> 1): [14.65, 13.64, 13.9, 0.03, 0.05, 0.03, 27.72, 27.22, 28.17]
+PASS igm (IGM via Multiwfn export)
+  PASS dimer grid: spacing <= 0.2 bohr, >= 2.5 bohr beyond atoms: spacing 0.200, reach 2.85 bohr
+  PASS dimer: delta-g_inter >= -1e-6: min 0.00e+00
+  PASS dimer: max on the H...O contact, sign(l2)rho < -0.015: max 0.0455 at [ 1.67  0.   -0.02] Å, sl2rho -0.0254
+  PASS dimer: behind the donor max delta-g_inter < 1e-3: 0.00e+00
+  PASS dimer: integral within 10 % of reference: 0.08555 vs 0.0856
+  PASS method.txt IGM line: IGM: IGMH (IGM on a Hirshfeld partition of this run's density; Lu & Chen, J. Comput. Chem. 43, 539 (2022)) by Multiwfn 2026.11.13 noGUI from wfn.molden; fragments [[1, 2, 3], [4, 5, 6]] (1-based, mol.xyz order; covalently bonded molecules); grid all atoms + 3.0 bohr (Multiwfn rounds the point count, so one side may reach ~0.3 bohr less), spacing 0.2 bohr; Integral of delta-g_inter: 0.085547 a.u.; dg_inter.cube (delta-g_inter, interfragment only) and igm_sl2rho.cube (sign(lambda2) rho); Multiwfn must be cited (Lu & Chen, J. Comput. Chem. 33, 580 (2012); Lu, J. Chem. Phys. 161, 082503 (2024))
+  PASS igm.png rendered: 
+  PASS single water without fragments: clean exit: --igm: only one molecule here; give the fragments with --igm-frags, e.g. "1-3;4-6" (1-based, mol.xyz order)
+  PASS PAM3 fold: max on H35...O5, sign(l2)rho < -0.01: frags [[14, 15, 16, 34, 35], [3, 4, 5, 21, 22]]; max 0.0294 at [-0.18  0.5  -2.45] Å, sl2rho -0.0161
+  PASS PAM3 fold: integral within 10 % of reference: 0.07575 vs 0.0757

@@ -1,0 +1,1 @@
+pam3_uvvis ok exit=0 :: calc night/baseline/pam3_opt.xyz --name pam3_uvvis --uvvis

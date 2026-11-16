@@ -1,26 +1,36 @@
-I built one item tonight, the def2 + ECP mixed basis, which was the last Week-3 item. The four Week-4 items all wait on you, so I logged them as skipped with questions. `test_def2.py` and `test_water.py` pass. I could not run the locked `night/sanity/def2.py`: running it directly needed approval. The sanity phase after this one runs it.
+I built all three remaining week-4 items tonight: IR, IGM and UV-Vis. Each sits behind a new flag and defaults are unchanged. `test_water.py` and each item's new fast test pass. The IR and IGM sanity checks have not finished yet: I started one sanity run but stopped it after 3 entries, because it would have clashed with the runner's own run after this phase. The reference comparison was skipped without a question, as your Answers say, because `ref/` is still empty.
 
-**What changed** (commit `2aa0182`):
-- **Mixed basis:** in `.xyz` input, atoms heavier than krypton (Z > 36) get def2-SVP plus its ECP (a pseudopotential that replaces the core electrons). All other atoms keep 6-31G(d).
-- **Defaults:** runs without such atoms build exactly the same calculation as before. Water gives the same numbers.
-- **Caption:** the level line reads "B3LYP/6-31G(d) + def2-SVP/ECP (I)". `method.txt` also states that the nuclear term of the ESP uses iodine's effective charge of 25 (53 minus 28 core electrons).
-- **Methyl iodide (CH₃I):** the energy matches a direct PySCF run with the same basis. The ESP runs from −0.020 to +0.030 a.u., with the expected positive spot (σ-hole) on the C→I axis beyond iodine and the negative minimum next to iodine. These match the reference numbers in the sanity script.
-- **Refused inputs:**
-  - SMILES containing iodine are refused, with a hint to use `.xyz`.
-  - Elements with no def2-SVP ECP in PySCF are refused (tested with francium).
-  - HBr (bromine is Z = 35) stays on 6-31G(d) as required.
+**IR, `calc --freq --ir`**
+- **Method:** intensities come from finite differences of the dipole: 6N extra SCFs at the run's own level.
+- **Water:** 79.99 / 1.80 / 20.38 km/mol against the reference 79.6 / 1.8 / 20.1.
+- **Formamide:** the C=O band at 1842 cm⁻¹ is the strongest, as the check requires.
+- **Spectrum:** scaled by 0.960 with Lorentzian FWHM 10 cm⁻¹. I looked at `ir.png` and it reads well.
+- **Below 400 cm⁻¹:** strong bands there fall outside the plot, so method.txt names them. Formamide has a 265 km/mol NH₂ wag at 64 cm⁻¹ that would otherwise vanish.
+- **Weak points:**
+  - `--ir` on a run that already has `--freq` recomputes the whole Hessian.
+  - Nothing is saved between the displaced SCFs, so PAM3 IR (222 SCFs) remains a day-session job and is not queued.
+  - IR in solvent runs but is labelled "not comparable to gas phase, untested".
 
-**Weak points:**
-- **Two flags are now refused with heavy atoms (the review found these).**
-  - `--nci`: without the core electrons the density near iodine is artificially low, so the NCI plot would show interactions that don't exist.
-  - `--freq`: the frequency calculation with an ECP is untested.
-- **Untested combinations:** `--opt`, `--d3`, `--solvent`, `--charges`, `--fukui` and `--spin` all run with the mixed basis, but nothing has checked them.
-- **Charges on iodine:** for `--charges`, iodine has no tabulated radius, so it uses an assumed 2.0 Å. This is stated in `method.txt`.
+**IGM, `calc --igm [--igm-frags "1-3;4-6"]`**
+- **How it runs:** IGMH through Multiwfn. I worked out Multiwfn's exact prompt sequence with a throwaway probe script.
+- **Water dimer:** integral 0.085547, against the reference 0.0856. The maximum sits on the H···O contact.
+- **Picture:** I looked at `igm.png`. It shows the usual H-bond disc with a blue centre.
+- **Grid:** Multiwfn rounds the point count, so the box reaches 2.85 bohr beyond the atoms rather than 3. method.txt now says so; the check only needs 2.5.
+- **Guards:** refused with `--spin` or heavy atoms (ECP). If you give fragments that are covalently bonded to each other, method.txt gets a warning.
+- **Untested:** IGM in solvent and after `--opt`.
 
-**Questions for you** (in `night/STATE.md` under Skipped):
-1. **Reference comparison:** have you bought the Gaussian reference files, and where should they go?
-2. **IGM:** may a day session install Multiwfn? The NCI check needs it as well.
-3. **IR spectrum:** PySCF has no built-in IR intensities for this setup. Should I compute them by finite differences (about a day of compute for PAM3) or install a package? I'd also need a frequency scale factor (about 0.96 for this method) and a peak width (I suggest 10 cm⁻¹).
-4. **UV-Vis:** how many states, how much broadening, and should the excited-state step use 6-31+G(d)? 6-31G(d) lacks diffuse functions, which shifts some states up.
+**UV-Vis, `calc --uvvis`: unvalidated, there is no sanity check for it yet**
+- **Method:** 10 singlet states; the ground state is redone in 6-31+G(d); Gaussian broadening FWHM 0.3 eV. All as you decided.
+- **Formaldehyde:** the first excited state is at 4.005 eV and dark (f = 0.0000), as it should be.
+- **What the test proves:** the energies match a direct PySCF run, and the spectrum's area matches the oscillator strengths. That shows the code is wired up correctly. It is not a comparison against literature values.
+- **Plot:** wavelengths beyond the highest computed state are greyed out, and the figure itself says "unvalidated".
+- **Refused** with `--solvent`, `--spin` or heavy atoms.
 
-No queue jobs, because nothing in this item needs a PAM3 run. STATE and the roadmap are updated and committed (`5770a9b`).
+**Queue:** one job, `pam3_uvvis`, on the gas-phase PAM3 geometry, to measure PAM3 timing and give a first look at its spectrum.
+
+**For a day session** (listed in STATE Next):
+1. Write a UV-Vis sanity check.
+2. Run PAM3 IGM in water by hand. It can't be queued because the queue doesn't copy `runs/pam3s_fold`.
+3. Run PAM3 IR.
+
+**Please delete by hand** (the night can't delete files): `test_zz_probe_igm.py`, `_probe_igm.py`, `_probe_igm.txt`, `/root/igm_probe/` in WSL, and the throwaway runs `runs/formamide_ir`, `runs/formamide_uv`, `runs/water_dimer_igm`.

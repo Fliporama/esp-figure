@@ -24,6 +24,9 @@ OPT_CONV = {  # geomeTRIC rules, recorded in method.txt
     "qchem": "qchem (geomeTRIC qccnv: RMS gradient 3e-4 AND either energy change 1e-6 Eh or RMS displacement 1.2e-3; max criteria not used)",
 }
 FREQ_NOISE = 50  # cm-1; imaginary modes smaller than this are reported as likely noise (soft torsions)
+# --ir (user, 2026-11-15): scale 0.960 (NIST CCCBDB, B3LYP/6-31G*) on the plotted spectrum only; Lorentzian FWHM 10 cm-1
+IR_SCALE, IR_FWHM, IR_STEP = 0.960, 10.0, 1e-3   # IR_STEP: finite-difference step for the dipole derivatives (bohr)
+IR_KM = 974.88   # (e/sqrt(amu))^2 -> km/mol
 ORB_ISO = 0.02   # orbital isovalue (a.u.) for the HOMO/LUMO pictures, a common GaussView-like choice
 ORB_COLORS = ("#2e8b57", "#8e44ad")   # +/- phase: green/purple, so no one reads them as ESP red/blue
 ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not tint the atoms' element colours
@@ -36,6 +39,14 @@ MK_SHELLS, MK_DENSITY = (1.4, 1.6, 1.8, 2.0), 5          # radius multiples; poi
 CHELPG_RADII = {"H": 1.45, "C": 1.50, "N": 1.70, "O": 1.70}   # other elements 2.0
 CHELPG_STEP, CHELPG_SHELL = 0.3, 2.8                       # Å grid spacing; Å beyond the radius spheres
 NCI_S, NCI_RHO, NCI_LIM = 0.5, 0.05, 0.04   # --nci picture: RDG isovalue, density cutoff, sign(lambda2) rho colour limit (a.u.)
+# --igm: IGMH by Multiwfn (installed by hand, docs/multiwfn-nci-check.md); grid all atoms + 3 bohr at 0.2 bohr;
+# igm.png isosurface delta-g_inter = 0.005 a.u. (Multiwfn's usual IGMH value), coloured like nci.png
+# --uvvis (user, 2026-11-15): TD-DFT, 10 singlet states, in 6-31+G(d) (ground state redone there; diffuse functions for
+# Rydberg-like states); Gaussian broadening FWHM 0.3 eV; epsilon from Gaussian's formula 1.3062974e8 * f / sigma(cm-1)
+UV_BASIS, UV_STATES, UV_FWHM = "6-31+G(d)", 10, 0.3
+EV2CM = 8065.544   # eV -> cm-1
+MULTIWFN = "/root/multiwfn/*/Multiwfn_noGUI"
+IGM_EXT, IGM_STEP, IGM_ISO = 3.0, 0.2, 0.005
 SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
 # H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
 # Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
@@ -218,6 +229,27 @@ def fit_charges(pts, V, xyz, total):
     return q, float(np.sqrt(((A @ q - V) ** 2).sum() / (V ** 2).sum()))
 
 
+def igm_fragments(frags, sym, xyz):
+    """--igm fragments as lists of 1-based atom indices: given ("1-3;4-6" or [[1, 2, 3], [4, 5, 6]]) or, if None, the
+    covalently bonded molecules. Exits with a message unless there are >= 2 disjoint fragments of valid atoms."""
+    if frags is None:
+        from rdkit import Chem
+        frags = [[i + 1 for i in f] for f in Chem.GetMolFrags(mol_from_xyz(sym, xyz))]
+        if len(frags) < 2:
+            sys.exit("--igm: only one molecule here; give the fragments with --igm-frags, e.g. \"1-3;4-6\" (1-based, mol.xyz order)")
+    elif isinstance(frags, str):
+        try:
+            frags = [[k for part in f.split(",") for k in range(int(part.split("-")[0]), int(part.split("-")[-1]) + 1)]
+                     for f in frags.split(";")]
+        except ValueError:
+            sys.exit(f'--igm-frags: cannot read "{frags}"; expected e.g. "1-3;4-6" or "1,2,5;3-4,6"')
+    flat = [k for f in frags for k in f]
+    if (len(frags) < 2 or not all(frags) or len(flat) != len(set(flat))
+            or not all(1 <= k <= len(sym) for k in flat)):
+        sys.exit(f"--igm-frags: need >= 2 disjoint, non-empty fragments of atoms 1..{len(sym)}, got {frags}")
+    return [list(map(int, f)) for f in frags]
+
+
 def heavy_atoms(sym):
     """Elements with Z > 36 (sorted), which get HEAVY_BASIS + ECP. Exits if PySCF has no such basis or ECP for one."""
     from pyscf import gto
@@ -319,7 +351,16 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None, ir=False, igm=False, igm_frags=None, uvvis=False):
+    if uvvis and (solvent or spin):   # ponytail: TD-DFT with PCM and UKS TD-DFT are untested; refused for now
+        sys.exit("--uvvis is not supported yet with --solvent or --spin")
+    import glob
+    if igm_frags is not None and not igm:
+        sys.exit("--igm-frags needs --igm")
+    if igm and not glob.glob(MULTIWFN):
+        sys.exit(f"--igm needs Multiwfn (noGUI) at {MULTIWFN}; install it by hand, see docs/multiwfn-nci-check.md")
+    if ir and not freq:
+        sys.exit("--ir needs --freq (intensities are projected on its normal modes)")
     if charges not in (None, "mk", "chelpg"):
         sys.exit(f"--charges must be mk or chelpg, got {charges}")
     if fukui and spin:   # ponytail: N+-1 of a radical would be singlet or triplet; not decided, so refused
@@ -330,12 +371,14 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     heavy = heavy_atoms(read_xyz(spec)[0]) if spec.endswith(".xyz") else []   # SMILES with Z > 36: refused in geometry()
     if heavy:
         level += f" + {HEAVY_BASIS}/ECP ({', '.join(heavy)})"
-    if heavy and (nci or freq):   # ponytail: ECP removes core density (fake RDG lobes) and the ECP Hessian is untested
-        sys.exit(f"--nci and --freq are not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
+    if heavy and uvvis:   # ponytail: 6-31+G(d) next to def2/ECP untested
+        sys.exit(f"--uvvis is not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
+    if heavy and (nci or freq or igm):   # ponytail: ECP removes core density (fake RDG/IGM lobes); ECP Hessian untested
+        sys.exit(f"--nci, --igm and --freq are not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
     if spin:   # multiplicity in the level string: caption, run cache and restart tag all tell spin states apart
         level = f"U{level} ({ {1: 'doublet', 2: 'triplet', 3: 'quartet'}.get(spin, f'multiplicity {spin + 1}') })"
-    if spin and (orbitals or freq):   # ponytail: HOMO/LUMO indexing and the UKS Hessian are untested; refuse for now
-        sys.exit("--spin with --orbitals or --freq is not supported yet")
+    if spin and (orbitals or freq or igm):   # ponytail: HOMO/LUMO indexing, UKS Hessian, UKS molden -> Multiwfn untested
+        sys.exit("--spin with --orbitals, --freq or --igm is not supported yet")
     rerank = rerank if rerank > 1 else 0       # 0 and 1 both mean: take the lowest-MMFF conformer
     if solvent:
         if solvent not in SOLVENTS:
@@ -354,6 +397,11 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         if ("optimised geometry (geomeTRIC)" in text) != opt or ("H-bond-free" in text) != no_hbond:
             sys.exit(f"{out} was computed with different --opt/--no-hbond settings. Use another --name, or --force.")
         if ((not orbitals or (out / "homo.cube").exists()) and (not freq or "frequencies (cm-1)" in text)
+                and (not ir or ("IR intensities" in text and (out / "ir_spectrum.csv").exists()))
+                and (not uvvis or ("\nUV-Vis: " in text and (out / "uvvis.csv").exists()))
+                and (not igm or ("\nIGM: " in text and (out / "dg_inter.cube").exists() and (out / "igm_sl2rho.cube").exists()
+                                 and (igm_frags is None or f"fragments {igm_fragments(igm_frags, *read_xyz(out / 'mol.xyz'))} " in text)
+                                 and (igm_frags is not None or "; covalently bonded molecules)" in text)))
                 and (not charges or f"atomic charges: {'MK' if charges == 'mk' else 'CHelpG'} " in text)
                 and (not nci or ("\nNCI: " in text and (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists()))
                 and (not fukui or ("\nFukui: " in text and (out / "fukui.txt").exists()))):
@@ -369,6 +417,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
 
     t0 = time.time()
     sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank, spin=spin)
+    frags = igm_fragments(igm_frags, sym, xyz[0] if rerank else xyz) if igm else None   # before any SCF: fail fast
     src = xyz_origin(spec) if spec.endswith(".xyz") else None   # (run, level) of an optimised mol.xyz input
     # Restart: --opt appends every step to opt_traj.xyz; a rerun resumes from the last frame (after a crash: no method.txt;
     # or a finished run recomputed for --orbitals/--freq).
@@ -493,6 +542,46 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     surf.point_data["esp"] = V
     surf.save(out / "surf.vtk")
     orb = nci_line
+    for k in ("dg_inter.cube", "igm_sl2rho.cube", "wfn.molden", "igm.png"):   # none that this method.txt doesn't describe
+        (out / k).unlink(missing_ok=True)
+    if igm:   # IGMH (Lu & Chen 2022) by Multiwfn from a molden export: main menu 20 -> 11, prompts as in the sanity docstring
+        import resource, subprocess
+        from pyscf.tools import molden
+        molden.from_scf(mf, str(out / "wfn.molden"))
+        exe = sorted(glob.glob(MULTIWFN))[-1]
+        keys = (f"20\n11\n{len(frags)}\n" + "".join(",".join(map(str, f)) + "\n" for f in frags)
+                + f"-10\n{IGM_EXT}\n4\n{IGM_STEP}\n3\n0\n0\nq\n")   # extension, spacing, export cubes, back, quit
+        for k in out.glob("*.cub"):   # Multiwfn's own names; a leftover must not pass for tonight's output
+            k.unlink()
+        hard = resource.getrlimit(resource.RLIMIT_STACK)[1]   # Multiwfn crashes on a small stack (its manual, 2.1.2);
+        resource.setrlimit(resource.RLIMIT_STACK, (hard, hard))   # set here, inherited by the child
+        try:
+            r = subprocess.run([exe, "wfn.molden"], input=keys, text=True, capture_output=True, cwd=out, timeout=7200,
+                               env={**os.environ, "OMP_STACKSIZE": "200M", "Multiwfnpath": str(Path(exe).parent)})
+        except subprocess.TimeoutExpired:
+            sys.exit("--igm: Multiwfn did not finish within 2 h")
+        integ = re.search(r"Integral of delta-g_inter over whole space:\s+(\S+)", r.stdout)
+        if r.returncode or not integ or not all((out / k).exists() for k in ("dg_inter.cub", "sl2r.cub")):
+            sys.exit(f"--igm: Multiwfn failed (exit {r.returncode}):\n{r.stdout[-1500:]}\n{r.stderr[-1500:]}")
+        fid = {k: n for n, f in enumerate(frags) for k in f}
+        cross = [f"{sym[a]}{a + 1}-{sym[b]}{b + 1}" for a, b in (sorted(t[:2]) for t in bond_list(sym, xyz))
+                 if a + 1 in fid and b + 1 in fid and fid[a + 1] != fid[b + 1]]
+        if cross:
+            print(f"WARNING: --igm: fragments are covalently bonded ({', '.join(cross)}); delta-g_inter shows those bonds",
+                  file=sys.stderr)
+        (out / "dg_inter.cub").replace(out / "dg_inter.cube")
+        (out / "sl2r.cub").replace(out / "igm_sl2rho.cube")
+        for k in ("dg.cub", "dg_intra.cub"):   # not used; large
+            (out / k).unlink(missing_ok=True)
+        ver = re.search(r"Version (\S+)", r.stdout)
+        orb += (f"IGM: IGMH (IGM on a Hirshfeld partition of this run's density; Lu & Chen, J. Comput. Chem. 43, 539 (2022)) by "
+                f"Multiwfn {ver.group(1) if ver else '(version not found)'} noGUI from wfn.molden; fragments {frags} "
+                f"(1-based, mol.xyz order; {'given' if igm_frags is not None else 'covalently bonded molecules'})"
+                + (f"; WARNING: fragments covalently bonded to each other ({', '.join(cross)}), so delta-g_inter also shows "
+                   f"those covalent bonds, not only noncovalent contacts" if cross else "") + f"; grid all "
+                f"atoms + {IGM_EXT} bohr (Multiwfn rounds the point count, so one side may reach ~0.3 bohr less), spacing {IGM_STEP} bohr; Integral of delta-g_inter: {integ.group(1)} a.u.; "
+                f"dg_inter.cube (delta-g_inter, interfragment only) and igm_sl2rho.cube (sign(lambda2) rho); Multiwfn must be "
+                f"cited (Lu & Chen, J. Comput. Chem. 33, 580 (2012); Lu, J. Chem. Phys. 161, 082503 (2024))\n")
     (out / "charges.txt").unlink(missing_ok=True)   # method.txt is rewritten: no charges file it doesn't describe
     if charges:   # same ESP (nuclei + density of this run) at MK / CHelpG points, fitted by constrained least squares
         cp, note = fit_points(charges, sym, xyz)
@@ -540,7 +629,9 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         orb += f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
     if freq:   # analytic Hessian (incl. D3/PCM terms of mf); translations/rotations projected out, imaginary -> negative
         from pyscf.hessian import thermo
-        f = np.sort(thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)["freq_wavenumber"])
+        ha = thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)
+        order = np.argsort(ha["freq_wavenumber"])
+        f = ha["freq_wavenumber"][order]
         # The count stays raw (sanity contract); small ones are split off: soft torsions of a floppy chain give a few
         # tens of cm-1 of numerical noise (grid, loose convergence), not a saddle point.
         small = int(((f < 0) & (f > -FREQ_NOISE)).sum())
@@ -557,6 +648,66 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f" (raw count of negative harmonic modes, unscaled; {small} of them within {FREQ_NOISE} cm-1 of zero, "
                 f"likely numerical noise on soft torsions; {int((f <= -FREQ_NOISE).sum())} clearly imaginary; "
                 f"0 clearly imaginary = minimum{where})\n")
+    for k in ("ir_spectrum.csv", "ir.png"):   # method.txt is rewritten: no spectrum it doesn't describe
+        (out / k).unlink(missing_ok=True)
+    if ir:   # double-harmonic intensities: d(mu)/dx by central differences of the SCF dipole, projected on the modes
+        c0, h, ref = mol.atom_coords(), IR_STEP, mf.make_rdm1()
+        dmu = np.zeros((len(sym), 3, 3))
+        for a in range(len(sym)):
+            for k in range(3):
+                mu = []
+                for s in (1, -1):
+                    c = c0.copy()
+                    c[a, k] += s * h
+                    m = scf(mol.set_geom_(c, unit="Bohr", inplace=False), dm0=ref)
+                    if not m.converged:
+                        sys.exit(f"--ir: SCF at displaced geometry (atom {a + 1}, axis {'xyz'[k]}) did not converge")
+                    mu.append(m.dip_moment(unit="AU", verbose=0))
+                dmu[a, k] = (mu[0] - mu[1]) / (2 * h)
+        # ions: the origin term q*dR/dx drops out, since vibrations are orthogonal to translations in mass-weighted coords
+        I = IR_KM * (np.einsum("akx,iak->ix", dmu, ha["norm_mode"][order]) ** 2).sum(1)   # e^2/amu -> km/mol
+        x = np.arange(400.0, 4001.0)
+        y = sum(i * (IR_FWHM / 2) ** 2 / ((x - IR_SCALE * v) ** 2 + (IR_FWHM / 2) ** 2) for v, i in zip(f, I) if v > 0)
+        np.savetxt(out / "ir_spectrum.csv", np.c_[x, y], fmt="%.1f,%.6g", comments="",
+                   header=f"wavenumber (cm-1, scaled x {IR_SCALE:.3f}),intensity (sum of Lorentzians; peak height = band "
+                          f"intensity in km/mol where bands do not overlap)")
+        orb += (f"IR intensities (km/mol): {', '.join(f'{v:.2f}' for v in I)}\n"
+                f"IR: harmonic frequencies and double-harmonic intensities (dipole derivatives by central differences, "
+                f"step {h} bohr, {6 * len(sym)} SCFs){'; dipole of the solvated density, no cavity/local-field correction, so not comparable to gas-phase intensities (untested in PCM)' if solvent else ''}; "
+                f"scale factor {IR_SCALE:.3f} (NIST CCCBDB, B3LYP/6-31G*) applied to the plotted spectrum only, frequencies "
+                f"above unscaled; Lorentzian FWHM {IR_FWHM:g} cm-1; imaginary modes left out; ir_spectrum.csv covers "
+                f"400-4000 cm-1" + "".join(f"; band at {v:.1f} cm-1 ({i:.1f} km/mol) is below it, not plotted"
+                                           for v, i in zip(f, I) if 0 < IR_SCALE * v < 400) + "\n")
+    for k in ("uvvis.csv", "uvvis.png"):
+        (out / k).unlink(missing_ok=True)
+    if uvvis:   # vertical singlet excitations at this geometry; ground state recomputed in the diffuse basis
+        gs = scf(gto.M(atom=[(s, tuple(r)) for s, r in zip(sym, mol.atom_coords())], unit="Bohr", charge=charge,
+                       basis=UV_BASIS.lower().replace("(d)", "*"), verbose=0))
+        if not gs.converged:   # keep the main results (as Fukui does); no uvvis.csv, so a rerun retries
+            print(f"WARNING: --uvvis: the {UV_BASIS} ground-state SCF did not converge; no UV-Vis written", file=sys.stderr)
+            orb += f"UV-Vis: not computed: the {UV_BASIS} ground-state SCF did not converge\n"
+    if uvvis and gs.converged:
+        td = gs.TDDFT()   # full TD-DFT (RPA), not Tamm-Dancoff; density fitting as in the SCF
+        td.nstates = UV_STATES
+        td.kernel()
+        ue, uf = td.e * H2EV, td.oscillator_strength(gauge="length")
+        sig = UV_FWHM / (2 * np.sqrt(np.log(2))) * EV2CM   # 1/e half-width, cm-1
+        e = np.arange(1.0, ue.max() + 1.0, 0.01)   # whole last band; render greys out what lies beyond the highest state
+        eps = sum(1.3062974e8 * b / sig * np.exp(-((e - a) * EV2CM / sig) ** 2) for a, b in zip(ue, uf))
+        np.savetxt(out / "uvvis.csv", np.c_[e, 1239.84193 / e, eps], fmt="%.3f,%.2f,%.6g", comments="",
+                   header=f"energy (eV),wavelength (nm),molar absorptivity epsilon (L mol-1 cm-1); highest computed state "
+                          f"{ue.max():.4f} eV: above it states are missing")
+        bad = int((~np.asarray(td.converged)).sum())
+        orb += (f"excitation energies (eV): {', '.join(f'{x:.4f}' for x in ue)}\n"
+                f"oscillator strengths: {', '.join(f'{x:.4f}' for x in uf)}\n"
+                f"UV-Vis: TD-DFT (full, not Tamm-Dancoff) B3LYP/{UV_BASIS}, density fitting, {UV_STATES} lowest singlet states, "
+                f"vertical at this geometry (ground state recomputed in {UV_BASIS}, E {gs.e_tot:.8f} Eh"
+                f"{' incl. D3, which does not change the excitations' if d3 else ''}; ESP and geometry stay in 6-31G(d)), "
+                f"gas phase, length-gauge oscillator strengths; Gaussian broadening FWHM {UV_FWHM} eV in energy, epsilon = "
+                f"1.3062974e8 f / sigma(cm-1) per band; only {UV_STATES} states, so the spectrum is incomplete above "
+                f"{ue.max():.2f} eV (below {1239.84193 / ue.max():.0f} nm; greyed out in uvvis.png); uvvis.csv; "
+                f"unvalidated (no locked sanity check)"
+                + (f"; WARNING: {bad} of {UV_STATES} states not converged" if bad else "") + "\n")
     disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
     if heavy:
         disp += (f"\nbasis: {HEAVY_BASIS} + {HEAVY_BASIS} ECP on {', '.join(heavy)}, 6-31G(d) on all other atoms; ESP nuclear "
@@ -831,6 +982,9 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         notes.append(f"{k}.png: {k.upper()} isosurfaces at +/-{ORB_ISO} a.u. (orbital value); colours show the phase "
                      f"(green +, purple -), not ESP sign; "
                      f"default view tilted ~30 deg from the ESP view")
+    nmap = LinearSegmentedColormap.from_list("nci", ["#0000ff", "#00c000", "#ff0000"])   # nci.png and igm.png
+    nbar = dict(title="sign(lambda2)*rho\n(a.u.)\n", fmt="%.3f", n_labels=5, color="black", vertical=True, position_x=0.86,
+                position_y=0.2, width=0.05, height=0.6, title_font_size=28, label_font_size=24)
     if (out / "rdg.cube").exists() and (out / "sl2rho.cube").exists():
         g = read_cube(out / "rdg.cube")
         g.point_data["sl2rho"] = read_cube(out / "sl2rho.cube")["rho"]
@@ -840,15 +994,12 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         # 8 A from PAM3 also stretched the camera framing)
         lobe = (g.contour([NCI_S], scalars="rho").clip_scalar(scalars="absl", value=NCI_RHO)
                 .clip_scalar(scalars="absl", value=1e-4, invert=False))
-        nmap = LinearSegmentedColormap.from_list("nci", ["#0000ff", "#00c000", "#ff0000"])
 
         def nci_surface(p):
             if lobe.n_points:
                 p.add_mesh(lobe.extract_surface(algorithm="dataset_surface").smooth_taubin(n_iter=20).compute_normals(),
                            scalars="sl2rho", cmap=nmap, clim=(-NCI_LIM, NCI_LIM), smooth_shading=True, specular=0.3,
-                           scalar_bar_args=dict(title="sign(lambda2)*rho\n(a.u.)\n", fmt="%.3f", n_labels=5, color="black",
-                                                vertical=True, position_x=0.86, position_y=0.2, width=0.05, height=0.6,
-                                                title_font_size=28, label_font_size=24))
+                           scalar_bar_args=nbar)
             else:
                 p.add_text("no NCI surface (s = 0.5, rho < 0.05 a.u.)", position="upper_left", font_size=16, color="black")
         # tilted ~35 deg about the middle axis: an H-bond disc lies across the long axis, so the default view sees it
@@ -859,6 +1010,62 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                      f"to +{NCI_LIM} a.u. (red, steric repulsion), interpolated across the surface; these colours are not "
                      f"ESP (blue = negative here, unlike the ESP maps)" + ("" if lobe.n_points else "; no NCI surface found")
                      + ("; default view tilted ~35 deg about the middle axis from the ESP view" if view is None else ""))
+    if (out / "dg_inter.cube").exists() and (out / "igm_sl2rho.cube").exists():
+        g = read_cube(out / "dg_inter.cube")
+        g.point_data["sl2rho"] = read_cube(out / "igm_sl2rho.cube")["rho"]
+        iso = g.contour([IGM_ISO], scalars="rho")
+
+        def igm_surface(p):
+            if iso.n_points:
+                p.add_mesh(iso.smooth_taubin(n_iter=20).compute_normals(), scalars="sl2rho", cmap=nmap,
+                           clim=(-NCI_LIM, NCI_LIM), smooth_shading=True, specular=0.3, scalar_bar_args=nbar)
+            else:
+                p.add_text(f"no IGM surface (delta-g_inter = {IGM_ISO} a.u.)", position="upper_left", font_size=16, color="black")
+        shoot(out / "igm.png", igm_surface, tilt=0.7, axis=0, shift=0.15, flat=True)   # same view as nci.png
+        notes.append(f"igm.png: IGMH isosurface delta-g_inter = {IGM_ISO} a.u. (interfragment only, fragments in the IGM line "
+                     f"above), coloured by sign(lambda2) rho from -{NCI_LIM} (blue, attractive) via 0 (green, van der Waals) to "
+                     f"+{NCI_LIM} a.u. (red, repulsive); these colours are not ESP" + ("" if iso.n_points else "; no IGM surface found")
+                     + ("; default view tilted ~35 deg about the middle axis from the ESP view" if view is None else ""))
+    if (out / "ir_spectrum.csv").exists():   # wavenumber decreasing to the right, the usual IR convention
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        x, y = np.loadtxt(out / "ir_spectrum.csv", delimiter=",", skiprows=1, unpack=True)
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
+        ax.plot(x, y, color="#1f2a44", lw=1.2)
+        ax.set_xlim(4000, 400)
+        ax.set_ylim(0, y.max() * 1.08 if y.max() > 0 else 1)
+        ax.set_xlabel(f"wavenumber (cm$^{{-1}}$, scaled × {IR_SCALE:.3f})")
+        ax.set_ylabel("IR intensity (km/mol, peak height)")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="x", color="#e5e5e5", lw=0.6)
+        fig.savefig(out / "ir.png", bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        notes.append(f"ir.png: harmonic IR spectrum, frequencies scaled by {IR_SCALE:.3f}, Lorentzian FWHM {IR_FWHM:g} cm-1, "
+                     f"peak height = band intensity (km/mol) where bands don't overlap; 400-4000 cm-1 only (see the IR line "
+                     f"above for bands outside it)")
+    if (out / "uvvis.csv").exists():
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        _, nm, eps = np.loadtxt(out / "uvvis.csv", delimiter=",", skiprows=1, unpack=True)
+        top = float(re.search(r"highest computed state (\S+) eV", (out / "uvvis.csv").read_text().splitlines()[0]).group(1))
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=200)
+        ax.plot(nm, eps, color="#1f2a44", lw=1.2)
+        ax.set_xlim(nm.min(), nm[eps > 1e-3 * eps.max()].max() + 50 if eps.max() > 0 else nm.max())
+        ax.axvspan(nm.min(), 1239.84193 / top, color="#d9d9d9", lw=0)
+        ax.set_title(f"TD-DFT B3LYP/{UV_BASIS}, {UV_STATES} states, FWHM {UV_FWHM} eV (unvalidated); grey: higher states "
+                     f"not computed", fontsize=9,
+                     color="#555555", loc="left")
+        ax.set_ylim(0, eps.max() * 1.08 if eps.max() > 0 else 1)
+        ax.set_xlabel("wavelength (nm)")
+        ax.set_ylabel("ε (L mol$^{-1}$ cm$^{-1}$)")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="x", color="#e5e5e5", lw=0.6)
+        fig.savefig(out / "uvvis.png", bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        notes.append(f"uvvis.png: TD-DFT UV-Vis spectrum ({UV_STATES} states, {UV_BASIS}, Gaussian FWHM {UV_FWHM} eV; see the "
+                     f"UV-Vis line above); grey: wavelengths below the highest computed state, where states are missing; unvalidated")
     for e in ex:
         notes.append(f"ESP {'minimum' if e['kind'] == 'min' else 'maximum'} on the surface (V_s,{e['kind']}): "
                      f"{e['value']:+.4f} a.u., nearest atom {e['atom']}; "
@@ -902,6 +1109,14 @@ if __name__ == "__main__":
                    help="with --nci: own NCI grid at this spacing (NCIPLOT ~0.1), atoms' box + 3 bohr; default the density grid")
     c.add_argument("--fukui", action="store_true",
                    help="condensed Fukui f+/f- (Mulliken) from UKS N+1/N-1 at the final geometry -> fukui.txt (closed shell only; two extra SCFs)")
+    c.add_argument("--ir", action="store_true",
+                   help="with --freq: IR intensities (finite-difference dipole derivatives, 6N extra SCFs) -> ir_spectrum.csv, ir.png")
+    c.add_argument("--igm", action="store_true",
+                   help="IGMH via Multiwfn (/root/multiwfn): delta-g_inter + sign(lambda2) rho cubes; render then draws igm.png")
+    c.add_argument("--igm-frags", metavar="FRAGS",
+                   help='with --igm: fragments, 1-based mol.xyz indices, e.g. "1-3;4-6"; default the covalently bonded molecules')
+    c.add_argument("--uvvis", action="store_true",
+                   help="TD-DFT UV-Vis (10 states, 6-31+G(d), FWHM 0.3 eV; gas phase, closed shell) -> uvvis.csv, uvvis.png")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -920,7 +1135,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step, ir=a.ir, igm=a.igm, igm_frags=a.igm_frags, uvvis=a.uvvis)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:

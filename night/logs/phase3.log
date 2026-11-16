@@ -1,12 +1,14 @@
-I wrote the review and committed it as `night: report` (`2647065`); the script pushes the branch.
+I've written the night report and committed it as `8184ed2 night: report`; the script pushes the branch.
 
-**Verdict: ✅ merge.** All 4 regression checks and all 17 sanity checks pass, including `def2`, the only item built tonight. Runs without heavy atoms build the same calculation as before.
+**Verdict: ⚠️ look first.** All 4 regression checks and all 19 sanity checks pass, including the two added tonight for IR and IGM. The code itself is fine to merge. Three things need your attention:
 
-- **What was built:** atoms heavier than krypton in `.xyz` input now get def2-SVP plus an effective core potential (a pseudopotential that replaces the core electrons). Every other atom keeps 6-31G(d). The CH₃I test energy matches a direct PySCF run, and the ESP map shows the expected positive spot (σ-hole) beyond the iodine.
-- **Main is 2 commits ahead of this branch** (`8eb5fe3`, `f2484d0`, the NCI render changes and `--nci-step`). That makes `git diff --stat main` look as if this branch removes those features. It doesn't; the night never touched those lines. I compared the changes by hand and they don't overlap, so the merge should be clean. I couldn't confirm with `git merge-tree` because it needed approval.
-- **Weak points:** the heavy-atom code was only tested on single-point runs of one hand-built CH₃I geometry. `--opt`, `--d3`, `--solvent`, `--charges`, `--fukui` and `--spin` run with heavy atoms but nothing has tested them. Phase 1 took only 7 minutes.
-- **No queue jobs ran**, so there are no new figures.
-- **Needs you:** the four Week-4 items (reference comparison, Multiwfn install, IR spectrum, UV-Vis) are waiting on your decisions. My recommendations for each are in the report.
-- **Suggested addition to `reference.json`:** a CH₃I regression check (energy −337.70445097 Eh, ESP −0.0202/+0.0302 a.u.). At the moment only the sanity script guards the heavy-atom path.
+1. **UV-Vis box unticked.** The night ticked the UV-Vis box in `IMPROVEMENTS.md`, but UV-Vis has no sanity check yet, so I unticked it as review.md requires. Writing that check is the next day-session job.
+2. **The PAM3 UV-Vis spectrum is misleading, so don't use the figure.** The queued run finished cleanly in 2 h 04 min.
+   - All 10 computed excited states are nearly dark (oscillator strength ≤ 0.014).
+   - The shoulder at 225 nm plausibly belongs to the amide n→π* transition, so that part looks real.
+   - The amide's strong π→π* band, near 190 nm, lies above the 10th state, so it wasn't computed. The peak the plot shows at 195 nm only appears because the calculation stops at 10 states.
+   - The run also used the old pilot geometry, not the syndiotactic folded one.
+   - A spectrum worth showing needs about 30 states on the `pam3s_fold` geometry. I added that to STATE "Next".
+3. **The merge will probably conflict in `IMPROVEMENTS.md`.** Today on main you added the `render --pick` block right below the week-4 lines this branch edits. Keep both sides.
 
-I also added the review outcome to `night/STATE.md`. The `def2` roadmap tick in `IMPROVEMENTS.md` stands, since its sanity check passes.
+Please also delete the leftover probe files and throwaway runs listed in the report.
