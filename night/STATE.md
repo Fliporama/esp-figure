@@ -106,7 +106,7 @@
   2. PAM3 IGM in water: `calc runs/pam3s_fold/mol.xyz --name pam3s_fold_igm --d3 --solvent water --igm --igm-frags <amide
      groups of H26...O16>` (outside the queue; --igm with PCM untested), render with the NCI view `--view=0.02,0.87,0.50`.
   3. PAM3 IR (Answers: ~1 day, day session): 222 extra SCFs on top of the Hessian; no restart inside the IR loop.
-  4. Reference comparison still waits for `ref/` files.
+  4. Reference comparison: done by day 2026-11-16 (acrylic acid, `ref/validate_acrylic.txt`).
   5. A PAM3 UV-Vis worth showing needs more states (~30, to reach the amide pi->pi* near 190 nm) and the
      `pam3s_fold` geometry; 10 states took 2 h, so expect several hours. Decide after the uvvis sanity check exists.
 - **Multiwfn NCI check PASSED (day, 2026-11-15)**: `/root/multiwfn` exists, so IGM (week 4 #2) is unblocked; how to drive
@@ -114,7 +114,7 @@
 - **Week 3: done** (charges, NCI, Fukui, def2). Day session: decide whether to test `--opt` with ECP atoms (e.g. CH3I C-I distance vs. ~2.14 Å).
 - **Week 4 (day, 2026-11-15): IR and IGM have locked sanity checks** (`night/sanity/{ir,igm}.py`, `docs/week4-sanity.md`):
   build IR first, then IGM (IGMH via Multiwfn, menu path in the igm.py docstring and `docs/multiwfn-nci-check.md`).
-  UV-Vis: no sanity check yet; build only after IR and IGM pass, marked "unvalidated". Reference comparison: `ref/` empty, skip.
+  UV-Vis: no sanity check yet; build only after IR and IGM pass, marked "unvalidated". Reference comparison: done by day 2026-11-16, skip.
 - **Fukui on PAM3 in water: FIXED by day 2026-11-15, do not touch.** The N-1 UKS SCF had not converged and the run exited
   without method.txt. Now: N+-1 start from the neutral density, then level shift 0.3, then second-order SCF
   (`fukui_scf`); if all fail, method.txt says "Fukui: not computed" and the main results are kept. test_fukui, sanity
@@ -154,9 +154,9 @@
      Mulliken-difference condensation; method.txt flags f+ as basis-limited (6-31G(d), no diffuse functions).
   4. def2: build it, MIXED basis: 6-31G(d) on H-Kr, def2-SVP + def2 ECP only on Z > 36; caption names both.
 - Week 4 (user, 2026-11-15, taking the night's recommendations):
-  1. Reference comparison: the Gaussian files go in `ref/` (.log/.fchk + geometry). Not bought yet: until `ref/`
-     holds them, skip this item WITHOUT a question. When they are there: queue `calc ref/<geom>.xyz --name ref_pam3`
-     at the reference's level (read the .log route line); mind 5d (PySCF) vs 6d (Gaussian default) for 6-31G(d).
+  1. Reference comparison: DONE by day 2026-11-16 on the vendor's acrylic acid (`ref/validate_acrylic.{py,txt}`,
+     raw Gaussian files in `ref/esp-20260212/`). There are no PAM3 Gaussian files: do NOT queue a `ref_pam3` job,
+     skip this item WITHOUT a question.
   2. Multiwfn: approved, installed by a day session at `/root/multiwfn` (manual download, site has a CAPTCHA).
      IGM only after the NCI water-dimer check against Multiwfn has passed. Until `/root/multiwfn` exists, skip
      IGM without a question.

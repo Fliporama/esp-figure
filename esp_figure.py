@@ -8,7 +8,7 @@
 Results live in runs/<name>/: mol.xyz, dens.cube, surf.vtk (with ESP), method.txt,
 and after render: ball.png, <style>_esp.png, caption.txt (+ homo/lumo .cube/.png with --orbitals).
 """
-import argparse, re, sys, time
+import argparse, os, re, sys, time
 from pathlib import Path
 import numpy as np
 
@@ -33,6 +33,9 @@ ORB_OPACITY = 0.3   # lower than the ESP surface (0.7): lobes in front must not 
 CONFS = 50       # conformers tried in the MMFF conformer search (SMILES input only)
 HB_CUT = 2.5     # Å; H···N/O closer than this (and >3 bonds apart) counts as an intramolecular H-bond
 LEVEL = "B3LYP/6-31G(d)"
+# --ref-level: analysis single point at the level checked against Gaussian 16 + Multiwfn on acrylic acid (2026-11-16:
+# ESP at their surface vertices MAE 0.03 kcal/mol). PySCF has no 6-311+G(d,p) for Br.
+REF_BASIS = "6-311+G(d,p)"
 # ESP-fitted charges (--charges): Merz-Singh-Kollman radii (Å) on 4 shells, and Breneman-Wiberg CHelpG radii (Å) on a grid
 MK_RADII = {"H": 1.20, "C": 1.50, "N": 1.50, "O": 1.40, "F": 1.35, "P": 1.80, "S": 1.75, "Cl": 1.70}
 MK_SHELLS, MK_DENSITY = (1.4, 1.6, 1.8, 2.0), 5          # radius multiples; points per Å²
@@ -45,7 +48,8 @@ NCI_S, NCI_RHO, NCI_LIM = 0.5, 0.05, 0.04   # --nci picture: RDG isovalue, densi
 # Rydberg-like states); Gaussian broadening FWHM 0.3 eV; epsilon from Gaussian's formula 1.3062974e8 * f / sigma(cm-1)
 UV_BASIS, UV_STATES, UV_FWHM = "6-31+G(d)", 10, 0.3
 EV2CM = 8065.544   # eV -> cm-1
-MULTIWFN = "/root/multiwfn/*/Multiwfn_noGUI"
+# Multiwfn_noGUI executable for --igm: environment variable MULTIWFN (a path or a glob; the newest match is used)
+MULTIWFN = os.environ.get("MULTIWFN", "/root/multiwfn/*/Multiwfn_noGUI")
 IGM_EXT, IGM_STEP, IGM_ISO = 3.0, 0.2, 0.005
 SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
 # H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
@@ -351,14 +355,15 @@ def geometry(spec, charge, no_hbond=False, top=1, spin=0):
 
 
 def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="runs", d3=False, solvent=None, rerank=0,
-         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None, ir=False, igm=False, igm_frags=None, uvvis=False):
+         orbitals=False, opt_conv="gau", freq=False, spin=0, charges=None, nci=False, fukui=False, nci_step=None, ir=False, igm=False, igm_frags=None, uvvis=False, ref_level=False):
     if uvvis and (solvent or spin):   # ponytail: TD-DFT with PCM and UKS TD-DFT are untested; refused for now
         sys.exit("--uvvis is not supported yet with --solvent or --spin")
     import glob
     if igm_frags is not None and not igm:
         sys.exit("--igm-frags needs --igm")
     if igm and not glob.glob(MULTIWFN):
-        sys.exit(f"--igm needs Multiwfn (noGUI) at {MULTIWFN}; install it by hand, see docs/multiwfn-nci-check.md")
+        sys.exit(f"--igm needs Multiwfn (noGUI) at {MULTIWFN}; install it by hand (docs/multiwfn-nci-check.md) "
+                 "and/or set the MULTIWFN environment variable to the Multiwfn_noGUI executable")
     if ir and not freq:
         sys.exit("--ir needs --freq (intensities are projected on its normal modes)")
     if charges not in (None, "mk", "chelpg"):
@@ -377,6 +382,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         sys.exit(f"--nci, --igm and --freq are not supported yet with {HEAVY_BASIS}/ECP atoms ({', '.join(heavy)})")
     if spin:   # multiplicity in the level string: caption, run cache and restart tag all tell spin states apart
         level = f"U{level} ({ {1: 'doublet', 2: 'triplet', 3: 'quartet'}.get(spin, f'multiplicity {spin + 1}') })"
+    if ref_level and (heavy or spin):   # ponytail: ECP next to 6-311+G(d,p) and UKS + SMD untested
+        sys.exit("--ref-level is not supported yet with --spin or heavy (ECP) atoms")
     if spin and (orbitals or freq or igm):   # ponytail: HOMO/LUMO indexing, UKS Hessian, UKS molden -> Multiwfn untested
         sys.exit("--spin with --orbitals, --freq or --igm is not supported yet")
     rerank = rerank if rerank > 1 else 0       # 0 and 1 both mean: take the lowest-MMFF conformer
@@ -391,6 +398,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             sys.exit(f"{out} holds a different molecule ({first}). Use another --name, or --force.")
         if f"level of theory: {level}," not in text:
             sys.exit(f"{out} was computed at a different level of theory (not {level}). Use another --name, or --force.")
+        if ("\nanalysis level: " in text) != ref_level:
+            sys.exit(f"{out} was computed with a different --ref-level setting. Use another --name, or --force.")
         if (f"--rerank {rerank})" not in text) if rerank else ("DFT re-ranking energies" in text):
             sys.exit(f"{out} was computed with a different --rerank setting. Use another --name, or --force.")
         # a recompute (for --orbitals/--freq) must not silently swap an optimised geometry for a draft one, or vice versa
@@ -418,6 +427,8 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     t0 = time.time()
     sym, xyz, charge, geo, rdm = geometry(spec, charge, no_hbond, top=rerank, spin=spin)
     frags = igm_fragments(igm_frags, sym, xyz[0] if rerank else xyz) if igm else None   # before any SCF: fail fast
+    if ref_level and "Br" in sym:
+        sys.exit(f"--ref-level: PySCF has no {REF_BASIS} basis for Br")
     src = xyz_origin(spec) if spec.endswith(".xyz") else None   # (run, level) of an optimised mol.xyz input
     # Restart: --opt appends every step to opt_traj.xyz; a rerun resumes from the last frame (after a crash: no method.txt;
     # or a finished run recomputed for --orbitals/--freq).
@@ -495,6 +506,26 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         mol = optimize(mf, callback=frame, **({"qccnv": True} if opt_conv == "qchem" else {}))
         mf = scf(mol)
         geo = f"{level} optimised geometry (geomeTRIC), started from {geo}"
+    mol_g, mf_g, scf_g, alevel = mol, mf, scf, level   # geometry level: --freq, --ir and --uvvis stay on it
+    if ref_level:   # one single point at the reference level; surface, ESP and the other analyses use it
+        alevel = f"PBE0-D3(BJ)/{REF_BASIS}" + (f" + SMD({solvent})" if solvent else "")
+        build = lambda x, q=charge, s=spin: gto.M(atom=[(a, tuple(map(float, r))) for a, r in zip(sym, x)], charge=q,
+                                                  spin=s, basis=REF_BASIS.lower(), verbose=0)
+
+        def scf(mol, dm0=None, level_shift=0, second_order=False):
+            mf = (dft.UKS if mol.spin else dft.RKS)(mol).density_fit()
+            mf.xc = "pbe0"
+            mf.level_shift = level_shift
+            mf.disp = "d3bj"
+            if solvent:   # SMD only here: the geometry stays IEF-PCM, as in the Gaussian reference (PCM opt, SMD single point)
+                mf = mf.SMD()
+                mf.with_solvent.solvent = solvent
+            if second_order:
+                mf = mf.newton()
+            mf.kernel(dm0)
+            return mf
+        mol = build(mol_g.atom_coords() * B2A)
+        mf = scf(mol)
     if not mf.converged:
         print("WARNING: SCF did not converge; results are not trustworthy", file=sys.stderr)
     dm = mf.make_rdm1()
@@ -589,7 +620,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         cname = {"mk": "MK", "chelpg": "CHelpG"}[charges]
         how = (f"{len(MK_SHELLS)} shells at {'/'.join(map(str, MK_SHELLS))} x radius, {MK_DENSITY} points per Å²"
                if charges == "mk" else f"{CHELPG_STEP} Å cubic grid, outside the radii and within {CHELPG_SHELL} Å of them")
-        (out / "charges.txt").write_text(f"# {cname} ESP-fitted charges (e), {level}; atom index (0-based, mol.xyz order), "
+        (out / "charges.txt").write_text(f"# {cname} ESP-fitted charges (e), {alevel}; atom index (0-based, mol.xyz order), "
                                          "element, charge\n" + "".join(f"{i} {s} {x:.6f}\n" for i, (s, x) in enumerate(zip(sym, q))),
                                          encoding="utf-8")
         orb += (f"atomic charges: {cname} (ESP fit, {how}, {len(cp)} fit points; radii {note}; sum constrained to the "
@@ -610,7 +641,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f"density, then level shift 0.3, then second-order SCF)\n")
     elif fukui:
         fp, fm = q0 - qi["N+1"], qi["N-1"] - q0   # p = Z - q
-        (out / "fukui.txt").write_text(f"# condensed Fukui functions (Mulliken), {level}; atom index (0-based, mol.xyz order), "
+        (out / "fukui.txt").write_text(f"# condensed Fukui functions (Mulliken), {alevel}; atom index (0-based, mol.xyz order), "
                                        "element, f+ (nucleophilic attack), f- (electrophilic attack); Mulliken-condensed "
                                        "values can be slightly negative (basis artefact), rank sites by the large ones\n" +
                                        "".join(f"{i} {s} {a:.6f} {b:.6f}\n" for i, (s, a, b) in enumerate(zip(sym, fp, fm))),
@@ -620,8 +651,10 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
             print(f"WARNING: Fukui {' and '.join(cont)} <S^2> off by > 10 %: spin contamination", file=sys.stderr)
         orb += (f"Fukui: f+ = p(N+1) - p(N), f- = p(N) - p(N-1), Mulliken-condensed; N+-1 as UKS doublets at this geometry "
                 f"(vertical, same level; SCF: {how['N+1']} (N+1) / {how['N-1']} (N-1)), <S^2> {s2['N+1']:.4f} (N+1) / {s2['N-1']:.4f} (N-1), pure doublet 0.7500"
-                f"{'; WARNING: spin contamination > 10 % in ' + ' and '.join(cont) if cont else ''}; f+ is basis-limited "
-                f"(6-31G(d) has no diffuse functions, so the anion's extra electron is squeezed onto the molecule); fukui.txt\n")
+                f"{'; WARNING: spin contamination > 10 % in ' + ' and '.join(cont) if cont else ''}; "
+                + (f"{REF_BASIS} has diffuse functions for the anion's extra electron" if ref_level else "f+ is basis-limited "
+                   "(6-31G(d) has no diffuse functions, so the anion's extra electron is squeezed onto the molecule)")
+                + "; fukui.txt\n")
     if orbitals:   # closed-shell RKS: HOMO = nelectron//2 - 1; same grid as the density cube
         h = mol.nelectron // 2 - 1
         for k, i in (("homo", h), ("lumo", h + 1)):
@@ -629,7 +662,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         orb += f"HOMO: {mf.mo_energy[h] * H2EV:.4f} eV\nLUMO: {mf.mo_energy[h + 1] * H2EV:.4f} eV\n"
     if freq:   # analytic Hessian (incl. D3/PCM terms of mf); translations/rotations projected out, imaginary -> negative
         from pyscf.hessian import thermo
-        ha = thermo.harmonic_analysis(mol, mf.Hessian().kernel(), imaginary_freq=False)
+        ha = thermo.harmonic_analysis(mol_g, mf_g.Hessian().kernel(), imaginary_freq=False)
         order = np.argsort(ha["freq_wavenumber"])
         f = ha["freq_wavenumber"][order]
         # The count stays raw (sanity contract); small ones are split off: soft torsions of a floppy chain give a few
@@ -651,7 +684,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     for k in ("ir_spectrum.csv", "ir.png"):   # method.txt is rewritten: no spectrum it doesn't describe
         (out / k).unlink(missing_ok=True)
     if ir:   # double-harmonic intensities: d(mu)/dx by central differences of the SCF dipole, projected on the modes
-        c0, h, ref = mol.atom_coords(), IR_STEP, mf.make_rdm1()
+        c0, h, ref = mol_g.atom_coords(), IR_STEP, mf_g.make_rdm1()
         dmu = np.zeros((len(sym), 3, 3))
         for a in range(len(sym)):
             for k in range(3):
@@ -659,7 +692,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 for s in (1, -1):
                     c = c0.copy()
                     c[a, k] += s * h
-                    m = scf(mol.set_geom_(c, unit="Bohr", inplace=False), dm0=ref)
+                    m = scf_g(mol_g.set_geom_(c, unit="Bohr", inplace=False), dm0=ref)
                     if not m.converged:
                         sys.exit(f"--ir: SCF at displaced geometry (atom {a + 1}, axis {'xyz'[k]}) did not converge")
                     mu.append(m.dip_moment(unit="AU", verbose=0))
@@ -681,7 +714,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
     for k in ("uvvis.csv", "uvvis.png"):
         (out / k).unlink(missing_ok=True)
     if uvvis:   # vertical singlet excitations at this geometry; ground state recomputed in the diffuse basis
-        gs = scf(gto.M(atom=[(s, tuple(r)) for s, r in zip(sym, mol.atom_coords())], unit="Bohr", charge=charge,
+        gs = scf_g(gto.M(atom=[(s, tuple(r)) for s, r in zip(sym, mol.atom_coords())], unit="Bohr", charge=charge,
                        basis=UV_BASIS.lower().replace("(d)", "*"), verbose=0))
         if not gs.converged:   # keep the main results (as Fukui does); no uvvis.csv, so a rerun retries
             print(f"WARNING: --uvvis: the {UV_BASIS} ground-state SCF did not converge; no UV-Vis written", file=sys.stderr)
@@ -708,7 +741,7 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
                 f"{ue.max():.2f} eV (below {1239.84193 / ue.max():.0f} nm; greyed out in uvvis.png); uvvis.csv; "
                 f"unvalidated (no locked sanity check)"
                 + (f"; WARNING: {bad} of {UV_STATES} states not converged" if bad else "") + "\n")
-    disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 else ""
+    disp = f" (includes dispersion)\ndispersion energy: {mf.get_dispersion():.8f} Eh (D3(BJ), pyscf-dispersion)" if d3 or ref_level else ""
     if heavy:
         disp += (f"\nbasis: {HEAVY_BASIS} + {HEAVY_BASIS} ECP on {', '.join(heavy)}, 6-31G(d) on all other atoms; ESP nuclear "
                  f"term uses the effective charges (" + ", ".join(f"{s} {mol.atom_charges()[sym.index(s)]}" for s in heavy) + ")")
@@ -720,12 +753,19 @@ def calc(spec, name, charge=0, opt=False, force=False, no_hbond=False, root="run
         disp += (f"\n<S^2>: {s2:.4f} (UKS, N_alpha - N_beta = {spin}; pure spin state {ideal:.4f}"
                  f"{'; WARNING: spin contamination > 10 %' if bad else ''}; ESP from the total density)")
     if solvent:
-        ws = mf.with_solvent
+        ws = mf_g.with_solvent
         disp += (f"\nsolvent: implicit {solvent}, IEF-PCM eps {ws.eps} (PySCF; default vdW radii x {ws.vdw_scale}, "
                  f"Lebedev order {ws.lebedev_order}), in the SCF"
                  f"{' and the optimisation' if opt else f' and the optimisation of run {src[0]}' if src and 'IEF-PCM' in src[1] else ' only (geometry not optimised in solvent)'}; "
                  "SCF energy is the total energy in solvent; mapped ESP is "
                  "nuclei + solvated electron density (PCM surface charges not included)")
+        if ref_level:
+            disp += (f"; the analysis single point uses SMD ({solvent}, PySCF; Marenich, Cramer & Truhlar 2009) instead, and "
+                     "its SCF energy above includes the SMD non-electrostatic (CDS) term")
+    if ref_level:
+        disp += (f"\nanalysis level: {alevel}, density fitting; single point at the final geometry (see geometry above); surface, ESP and "
+                 f"--charges/--orbitals/--nci/--fukui/--igm use it, --freq/--ir/--uvvis stay at the geometry level\n"
+                 f"geometry-level SCF energy: {mf_g.e_tot:.8f} Eh (converged: {mf_g.converged})")
 
     log.write_text(f"""input: {spec}
 name: {name}
@@ -739,7 +779,7 @@ SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
 ESP range on surface: {V.min():.4f} to {V.max():.4f} a.u.
 {orb}software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
 wall time: {time.time() - t0:.0f} s
-caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {level} level with PySCF {pyscf.__version__} ({geo}).
+caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {alevel} level with PySCF {pyscf.__version__} ({geo}).
 """)
     print(log.read_text())
     return out
@@ -1112,11 +1152,14 @@ if __name__ == "__main__":
     c.add_argument("--ir", action="store_true",
                    help="with --freq: IR intensities (finite-difference dipole derivatives, 6N extra SCFs) -> ir_spectrum.csv, ir.png")
     c.add_argument("--igm", action="store_true",
-                   help="IGMH via Multiwfn (/root/multiwfn): delta-g_inter + sign(lambda2) rho cubes; render then draws igm.png")
+                   help="IGMH via Multiwfn (env MULTIWFN, default /root/multiwfn/*/Multiwfn_noGUI): delta-g_inter + sign(lambda2) rho cubes; render then draws igm.png")
     c.add_argument("--igm-frags", metavar="FRAGS",
                    help='with --igm: fragments, 1-based mol.xyz indices, e.g. "1-3;4-6"; default the covalently bonded molecules')
     c.add_argument("--uvvis", action="store_true",
                    help="TD-DFT UV-Vis (10 states, 6-31+G(d), FWHM 0.3 eV; gas phase, closed shell) -> uvvis.csv, uvvis.png")
+    c.add_argument("--ref-level", action="store_true",
+                   help=f"surface, ESP and analyses from one PBE0-D3(BJ)/{REF_BASIS} single point (SMD with --solvent), the level "
+                        "checked against Gaussian 16; geometry, --freq, --ir stay at the run's level (PAM3: ~5x the SCF time)")
     r = sub.add_parser("render", help="PNGs from an existing run (seconds)")
     r.add_argument("name")
     r.add_argument("--style", choices=["rwb", "rainbow", "both"], default="both")
@@ -1135,7 +1178,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.cmd == "calc":
         calc(a.input, a.name, a.charge, a.opt, a.force, a.no_hbond, d3=a.d3, solvent=a.solvent, rerank=a.rerank,
-             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step, ir=a.ir, igm=a.igm, igm_frags=a.igm_frags, uvvis=a.uvvis)
+             orbitals=a.orbitals, opt_conv=a.opt_conv, freq=a.freq, spin=a.spin, charges=a.charges, nci=a.nci, fukui=a.fukui, nci_step=a.nci_step, ir=a.ir, igm=a.igm, igm_frags=a.igm_frags, uvvis=a.uvvis, ref_level=a.ref_level)
     elif a.cmd == "panel":
         panel(a.names, a.labels, a.style, a.out)
     else:

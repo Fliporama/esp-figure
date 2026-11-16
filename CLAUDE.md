@@ -16,8 +16,8 @@ First target molecule: polyacrylamide (PAM) oligomer.
 
 ## Status
 
-- Prototype works (three scripts, see "Prototype" below). Output was checked
-  visually and looks close to GaussView quality.
+- Prototype (three scripts, superseded by `esp_figure.py`; deleted 2026-11-16, in git history; its demo image is
+  now `docs/esp_demo.png`, used by the README). Output was checked visually and looks close to GaussView quality.
 - `esp_figure.py` + `test_water.py` built to the design below (approved
   2026-11-10). Water test passes; `runs/pam3/` has draft (MMFF) figures,
   checked visually. Target molecule: the H-capped PAM trimer. Default figure
@@ -127,8 +127,8 @@ First target molecule: polyacrylamide (PAM) oligomer.
   not "folded preferred".
 - **Night 5 + day session 2026-11-16** (merged 3cb0f82; 19/19 sanity, 4/4 regression, test_{water,ir,igm,uvvis} pass):
   `calc --freq --ir` (finite-difference dipoles, water 80.0/1.8/20.4 km/mol), `calc --igm [--igm-frags]` (IGMH via
-  Multiwfn; path hard-coded `/root/multiwfn`, `MULTIWFN` in esp_figure.py: make it configurable before using a non-root
-  machine), `calc --uvvis` (**unvalidated**, no sanity check; roadmap box unticked). The queued `runs/pam3_uvvis`
+  Multiwfn; path from env `MULTIWFN`, default `/root/multiwfn/*/Multiwfn_noGUI`, configurable since 2026-11-16),
+  `calc --uvvis` (**unvalidated**, no sanity check; roadmap box unticked). The queued `runs/pam3_uvvis`
   (pilot geometry, 10 states, 2 h) is **misleading, don't use**: all states nearly dark, the amide π→π* (~190 nm) lies
   above state 10, so the 195 nm "peak" is a cut-off artefact; a real one needs ~30 states on `pam3s_fold`.
   Also: optconv sanity now on n-butane (3e75a8a; formamide passed with qccnv disconnected); roadmap item `render --pick`
@@ -138,6 +138,17 @@ First target molecule: polyacrylamide (PAM) oligomer.
   (long; candidate for a lab computer with more RAM/cores, user checking its specs 2026-11-17).
   Side question answered: stearyl acrylate passes all guards (63 atoms, ~3–4× PAM3 per step); MMFF conformer search
   can't sample its C18 chain, use a hand-built all-trans `.xyz`; analytic `--freq` would need ~30 GB, too big here.
+- **Gaussian validation, day 2026-11-16** (week 4 reference item done). Source: the vendor job (Feb 2026, 248 MB with
+  its .zip, moved out of the repo to `C:\dev\vendor\ESP-20260212`; never in git); molecules a acrylamide, b PAM4 Me-capped, c ethylene glycol, d PEG4, e acrylic acid; raw files
+  only for e, copied to `ref/esp-20260212/`). Vendor level: PBE0-D3(BJ)/6-31+G(d,p)/PCM opt freq → PBE0-D3(BJ)/
+  6-311+G(d,p)/SMD SP, Multiwfn surface. `ref/validate_acrylic.{py,txt}` (~15 min): at their level PySCF matches
+  (ESP MAE 0.03 kcal/mol at their vertices, energy −0.15 kcal/mol, D3 identical). Our levels vs theirs (ESP extrema):
+  default gas −22/−19 %, `--d3 --solvent water` −8/−9 % (IEF-PCM vs SMD alone −6/−5 %, basis −2/0, B3LYP 0/−3).
+  **Solvent dominates, not the basis.** Their report mixes colour conventions (VMD panels red = positive).
+  Acrylamide runs: `runs/acrylamide` (gas, `--opt --rerank 2`, s-cis, s-trans +1.8 kcal/mol, ESP −0.068/+0.073) and
+  `runs/acrylamide_w` (`--d3 --solvent water`, s-cis, ESP −0.0860/+0.0939, rendered `--limit 0.10,0.05`); at the
+  vendor level on our geometry −59.73/+66.59 vs their −59.86/+66.28 kcal/mol. Open: SMD option and/or bigger ESP
+  basis (IMPROVEMENTS "Found 2026-11-12" list); not decided.
 
 ## This machine
 

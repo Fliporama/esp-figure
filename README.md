@@ -8,7 +8,7 @@ structure they work with for a paper or thesis, but don't have access to
 paid packages like Gaussian + GaussView. One command does the quantum
 chemistry; a second makes the images in seconds.
 
-![Ball-and-stick, red-white-blue ESP and rainbow ESP of a polyacrylamide trimer](prototype/esp_demo.png)
+![Ball-and-stick, red-white-blue ESP and rainbow ESP of a polyacrylamide trimer](docs/esp_demo.png)
 
 *Polyacrylamide trimer: structure, ESP (red-white-blue), ESP (rainbow).
 Red = negative, blue = positive.*
@@ -75,6 +75,7 @@ force-field draft.
 | `--opt` | DFT geometry optimisation (geomeTRIC); `--opt-conv qchem` for floppy chains. Restarts from `opt_traj.xyz` if interrupted |
 | `--d3` | D3(BJ) dispersion; changes energies, not the ESP |
 | `--solvent water` | implicit water (IEF-PCM) for the SCF, the optimisation and the ESP |
+| `--ref-level` | surface, ESP and the analyses from one extra PBE0-D3(BJ)/6-311+G(d,p) single point (SMD with `--solvent`), the level checked against Gaussian 16; geometry, `--freq` and `--ir` stay at the run's level. Not for Br, ECP atoms or `--spin` |
 | `--rerank N` | DFT single points on the N lowest force-field conformers; continue with the lowest |
 | `--no-hbond` | start from the lowest conformer without an internal H-bond (extended shapes) |
 | `--freq` | harmonic frequencies; 0 imaginary = true minimum (slow: hours and ~10 GB RAM for 35 atoms) |
@@ -89,8 +90,8 @@ force-field draft.
 | `--charge Q` | total charge for `.xyz` input |
 
 **Multiwfn for `--igm`:** download the Linux noGUI build from the Multiwfn website by hand (it has a CAPTCHA)
-and unpack it so that `/root/multiwfn/<version>/Multiwfn_noGUI` exists; the path is fixed in `esp_figure.py`
-(`MULTIWFN`), so on a machine without root, edit that line. Details: `docs/multiwfn-nci-check.md`.
+and unpack it so that `/root/multiwfn/<version>/Multiwfn_noGUI` exists, or unpack it anywhere and point the
+`MULTIWFN` environment variable at the executable (e.g. `export MULTIWFN=$HOME/multiwfn/Multiwfn_noGUI`; a glob works too). Details: `docs/multiwfn-nci-check.md`.
 Every other option works without it.
 
 Elements with Z > 36 (e.g. I) are supported from `.xyz` input with def2-SVP + ECP on
@@ -126,7 +127,11 @@ negative ESP, blue positive.
   energies differ slightly from Gaussian's.
 - **Laptop-sized.** ~35 atoms: minutes per single point, about an hour per optimisation,
   hours for frequencies. Large molecules (≳100 atoms) get slow and the surface may look faceted.
-- Not validated against a Gaussian reference calculation yet. UV-Vis has no sanity check at all;
+- Validated against Gaussian 16 + Multiwfn on acrylic acid (`ref/validate_acrylic.txt`): at the same level
+  (PBE0-D3(BJ)/6-311+G(d,p)/SMD) the surface ESP agrees to 0.03 kcal/mol on average. The default level is
+  cheaper: in water (`--d3 --solvent water`) ESP extrema come out ~10 % weaker than that reference level, in the
+  gas phase ~20 %. Use `--solvent water` for anything about aqueous systems, and add `--ref-level` for final
+  numbers: `calc --ref-level --solvent water` reproduces the Gaussian extrema within 0.4 % (`test_reflevel.py`). UV-Vis has no sanity check at all;
   IR and IGM in solvent are untested.
 
 ## Citing

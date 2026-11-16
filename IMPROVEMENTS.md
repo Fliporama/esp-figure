@@ -139,7 +139,8 @@ next session.
   Z > 36 only; `--nci`/`--freq` refused with ECP atoms)
 
 **Week 4: validation + buffer**
-- [ ] Compare against a reference (see below), add tests, update docs
+- [x] Compare against a reference (see below), add tests, update docs (2026-11-16, day: vendor acrylic acid +
+  acrylamide, `ref/validate_acrylic.{py,txt}`; a script, not a locked sanity check; no PAM3 Gaussian files)
 - [x] IGM via Multiwfn export (§5), if time: `calc --igm [--igm-frags]` (2026-11-16, night; IGMH, render igm.png)
 - [x] IR spectrum from the frequency calc, if time: `calc --freq --ir` (2026-11-16, night; render ir.png)
 - [ ] UV-Vis (TD-DFT): stretch: `calc --uvvis` built (2026-11-16, night; **unvalidated**, no sanity check, so unticked; gas, closed shell)
@@ -150,10 +151,18 @@ next session.
   paste into `render`. Needs a check by eye (window opens under WSL; printed view reproduces the same picture), which
   a night can't do. Default `render` stays offscreen.
 
-**Validation reference:** buy one PAM3 ESP figure from a commercial service
-(~500 yuan) *with raw files* (Gaussian `.log`/`.fchk` + geometry). Run our tool
-on their geometry and compare energy, ESP range and figure. That gives a
-citable Gaussian-vs-PySCF check.
+**Validation reference:** ~~buy one PAM3 ESP figure~~ DONE 2026-11-16 with the vendor job already owned
+(`ESP-20260212`, Feb 2026; molecules acrylamide, PAM4 Me-capped, ethylene glycol, PEG4, acrylic acid; raw
+Gaussian files only for acrylic acid, copied to `ref/esp-20260212/`). Their level: PBE0-D3(BJ)/6-31+G(d,p)/PCM opt
+freq, then PBE0-D3(BJ)/6-311+G(d,p)/SMD water single point, Multiwfn surface (rho 0.001). `ref/validate_acrylic.py`:
+- At their level on their geometry, PySCF reproduces Gaussian+Multiwfn: ESP at their 23607 vertices MAE 0.03,
+  max 0.12 kcal/mol; extrema −43.77/+61.77 vs −43.65/+62.01; energy 0.15 kcal/mol lower (D3 identical, SMD-CDS
+  0.003 kcal/mol apart, rest = SMD cavity/grid discretisation). Acrylamide (their geometry unknown) on our s-cis
+  `acrylamide_w` geometry: −59.73/+66.59 vs their −59.86/+66.28 kcal/mol.
+- Error of our levels vs theirs (ESP extrema, same geometry): functional B3LYP 0/−3 %, basis 6-31G(d) −2/0 %
+  (local map up to 3.4 kcal/mol), IEF-PCM instead of SMD −6/−5 %, gas instead of SMD −22/−17 %.
+  `--d3 --solvent water` −8/−9 % (acrylamide −10/−11 %); default gas −22/−19 %. Solvent dominates; basis is minor here.
+- Their report has an error: the VMD red-white-blue panels use red = positive, the GaussView panels red = negative.
 
 **Out of scope for this month:** transition states and mechanisms; NMR, CD,
 optical rotation, phosphorescence; fast results for 150+ atom systems (limited
@@ -195,6 +204,10 @@ give better-documented PAM figures than the paid service.
   smooth instead of blocky. Default `--nci` still uses the density grid (locked sanity contract).
 - No automatic NCI view: PAM3 needed a hand-picked `--view` (H-bond lobe hidden behind a vdW lobe in the
   ESP view). `--view auto` scores ESP features, not NCI lobes.
+- From the Gaussian validation (2026-11-16): `--solvent water` (IEF-PCM) gives ESP extrema 5–6 % weaker than SMD,
+  and our full water setup 8–11 % weaker than the vendor's PBE0-D3/6-311+G(d,p)/SMD. Options: an SMD choice
+  (`mf.SMD()` exists in PySCF 2.15, used in `ref/validate_acrylic.py`) and/or a bigger basis for the ESP single
+  point only. Not decided; would change the locked water numbers (PAM3 limits ±0.10/±0.05).
 - Basis convention: PySCF 6-31G(d) uses 5 spherical d; Gaussian's default is 6 Cartesian d. Matters for the
   week-4 comparison against Gaussian files (energies differ by ~mEh); use `cart=True` or Gaussian `5D` there.
 
