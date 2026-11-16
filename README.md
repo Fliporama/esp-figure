@@ -15,7 +15,8 @@ Red = negative, blue = positive.*
 
 ## Install
 
-Everything is free and comes from `pip`; nothing else has to be downloaded by hand.
+Everything is free and comes from `pip`; nothing else has to be downloaded by hand,
+except Multiwfn for the optional `--igm` (see below).
 Needs Python 3.10+ on Linux or macOS. **On Windows, use WSL** (PySCF does not run
 natively on Windows): `wsl --install -d Ubuntu` in an admin PowerShell, reboot, then
 do the rest inside Ubuntu.
@@ -81,8 +82,16 @@ force-field draft.
 | `--charges mk\|chelpg` | ESP-fitted atomic charges → `charges.txt` |
 | `--nci` (`--nci-step 0.1`) | non-covalent interaction (RDG) plot → `nci.png` |
 | `--fukui` | condensed Fukui functions f+/f− → `fukui.txt` |
+| `--ir` (with `--freq`) | IR spectrum: intensities from finite-difference dipole derivatives, frequencies scaled by 0.960 in the plot, Lorentzian FWHM 10 cm⁻¹ → `ir_spectrum.csv`, `ir.png` |
+| `--igm` (`--igm-frags "1-3;4-6"`) | IGMH weak-interaction plot via **Multiwfn** (needs a manual install, see below) → `igm.png` |
+| `--uvvis` | UV-Vis by TD-DFT: 10 singlet states, 6-31+G(d), Gaussian FWHM 0.3 eV → `uvvis.csv`, `uvvis.png`. **Unvalidated**; gas phase, closed shell only. 10 states cover only the lowest bands: check that the band you care about lies below the last state |
 | `--spin N` | open-shell molecules (UKS), `.xyz` input only |
 | `--charge Q` | total charge for `.xyz` input |
+
+**Multiwfn for `--igm`:** download the Linux noGUI build from the Multiwfn website by hand (it has a CAPTCHA)
+and unpack it so that `/root/multiwfn/<version>/Multiwfn_noGUI` exists; the path is fixed in `esp_figure.py`
+(`MULTIWFN`), so on a machine without root, edit that line. Details: `docs/multiwfn-nci-check.md`.
+Every other option works without it.
 
 Elements with Z > 36 (e.g. I) are supported from `.xyz` input with def2-SVP + ECP on
 those atoms only.
@@ -117,7 +126,8 @@ negative ESP, blue positive.
   energies differ slightly from Gaussian's.
 - **Laptop-sized.** ~35 atoms: minutes per single point, about an hour per optimisation,
   hours for frequencies. Large molecules (≳100 atoms) get slow and the surface may look faceted.
-- Not validated against a Gaussian reference calculation yet.
+- Not validated against a Gaussian reference calculation yet. UV-Vis has no sanity check at all;
+  IR and IGM in solvent are untested.
 
 ## Citing
 
@@ -126,7 +136,9 @@ If you use this in a paper, please cite the software that does the real work:
 [RDKit](https://www.rdkit.org),
 [PyVista](https://docs.pyvista.org/getting-started/authors.html#citing-pyvista),
 [geomeTRIC](https://github.com/leeping/geomeTRIC) if you used `--opt`,
-and [simple-dftd3](https://github.com/dftd3/simple-dftd3) if you used `--d3`.
+[simple-dftd3](https://github.com/dftd3/simple-dftd3) if you used `--d3`,
+and Multiwfn (Lu & Chen, J. Comput. Chem. 33, 580 (2012); Lu, J. Chem. Phys. 161, 082503 (2024))
+plus IGMH (Lu & Chen, J. Comput. Chem. 43, 539 (2022)) if you used `--igm`.
 
 ## License
 
