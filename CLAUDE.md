@@ -125,6 +125,19 @@ First target molecule: polyacrylamide (PAM) oligomer.
   entropy, so the preference halves again (gas no D3: 6.3 → water+D3: 3.15 → G: ~1.5). ~1.5 kcal/mol is within the
   error of one conformer each, harmonic soft modes (6–7 below 100 cm⁻¹) and implicit solvent: call it "comparable",
   not "folded preferred".
+- **Night 5 + day session 2026-11-16** (merged 3cb0f82; 19/19 sanity, 4/4 regression, test_{water,ir,igm,uvvis} pass):
+  `calc --freq --ir` (finite-difference dipoles, water 80.0/1.8/20.4 km/mol), `calc --igm [--igm-frags]` (IGMH via
+  Multiwfn; path hard-coded `/root/multiwfn`, `MULTIWFN` in esp_figure.py: make it configurable before using a non-root
+  machine), `calc --uvvis` (**unvalidated**, no sanity check; roadmap box unticked). The queued `runs/pam3_uvvis`
+  (pilot geometry, 10 states, 2 h) is **misleading, don't use**: all states nearly dark, the amide π→π* (~190 nm) lies
+  above state 10, so the 195 nm "peak" is a cut-off artefact; a real one needs ~30 states on `pam3s_fold`.
+  Also: optconv sanity now on n-butane (3e75a8a; formamide passed with qccnv disconnected); roadmap item `render --pick`
+  (interactive view picker, day session only, STATE tells nights to skip it); README brought up to date (working
+  stereo example, all options, `PYSCF_MAX_MEMORY`/`PYSCF_TMPDIR` for big machines). Week 4 left: Gaussian reference
+  (`ref/` not bought), UV-Vis sanity check. Next day jobs: PAM3 UV-Vis (~30 states), PAM3 IGM in water, PAM3 IR
+  (long; candidate for a lab computer with more RAM/cores, user checking its specs 2026-11-17).
+  Side question answered: stearyl acrylate passes all guards (63 atoms, ~3–4× PAM3 per step); MMFF conformer search
+  can't sample its C18 chain, use a hand-built all-trans `.xyz`; analytic `--freq` would need ~30 GB, too big here.
 
 ## This machine
 
