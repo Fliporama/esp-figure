@@ -160,6 +160,11 @@ First target molecule: polyacrylamide (PAM) oligomer.
   (min +0.018, max −0.001..−0.010 a.u.); a value cutoff option was suggested, not built. Seam artefacts fixed (pitfall 3).
   `mol_from_xyz` fix: tiny coordinates were written as `-9e-06`, which RDKit's XYZ reader rejects (planar molecules).
   PAM3 fold/ext `--ref-level` runs started (`runs/ref_pam3s.sh`, status in `runs/ref_pam3s.status`).
+  Whole pipeline vs vendor (`runs/acrylic_full`: SMILES `--opt --rerank 2 --d3 --solvent water --ref-level`, 663 s on
+  4 shared threads): same conformer (RMSD 0.006 Å to their geometry), same 6 max + 2 min within 0.07 Å, all 8 values
+  within 0.6 kcal/mol / 2.6 % (global −0.9 / +0.6 %); our cheaper geometry adds 0.2–2 % over their-geometry runs.
+  Related-work survey: `docs/related-work.md` (closest: espmap, same vertex-ESP pipeline, aims at measurement;
+  nobody else validates against Gaussian/Multiwfn; ideas not built: no specular, solvent-convention caption line).
 - **Next (user to choose, 2026-11-16):** (1) PAM3 fold + ext at `--ref-level` in water on the existing geometries
   (`calc runs/pam3s_fold/mol.xyz --name pam3s_fold_ref --d3 --solvent water --ref-level`, same for ext; not run yet,
   time unmeasured, guess 1–2 h each; the "~5x" in the `--ref-level` help is a guess too); (2) label all local ESP
