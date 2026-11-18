@@ -31,7 +31,7 @@ a full grid, no interpolation error).
 | Default level | B3LYP/def2-TZVP, gas | B3LYP/6-31G(d); `--ref-level` PBE0-D3(BJ)/6-311+G(d,p)/SMD |
 | Gaussian / Multiwfn check | none | ESP extrema within 0.4 %, local extrema 6 + 2 within 0.2 Å |
 | Local extrema | no (σ-hole, per-atom sites) | yes (`render --extrema all`) |
-| Its extras | conformer ensembles, record comparison with uncertainty, `--gpu`, Colab notebook, interactive HTML, JSON record with provenance keys, structure gate | freq/IR, NCI, IGM, Fukui, charges, orbitals, D3, night runner |
+| Its extras | conformer ensembles, record comparison with uncertainty, `--gpu`, Colab notebook, interactive HTML, JSON record with provenance keys, structure gate | freq/IR, NCI, IGM, Fukui, charges, orbitals, D3, 20 locked sanity checks |
 
 Its measured findings that bear on this project:
 

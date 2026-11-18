@@ -58,7 +58,7 @@ EV2CM = 8065.544   # eV -> cm-1
 MULTIWFN = os.environ.get("MULTIWFN", "/root/multiwfn/*/Multiwfn_noGUI")
 IGM_EXT, IGM_STEP, IGM_ISO = 3.0, 0.2, 0.005
 SOLVENTS = {"water": 78.3553}   # dielectric constants for --solvent (PySCF/Gaussian value for water)
-# H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by night/sanity/stereo.py).
+# H-capped PAM trimer, syndiotactic (adjacent CONH2 alternate sides of the zigzag backbone; checked by tests/sanity/stereo.py).
 # Free-radical PAM is atactic; syndiotactic is the model choice (user decision 2026-11-11).
 PAM3 = "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O"
 # Elements with both MMFF94 parameters and a 6-31G(d) basis in PySCF (no I: 6-31G(d) stops before it)

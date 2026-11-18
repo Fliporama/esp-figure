@@ -1,4 +1,4 @@
-"""Gaussian-vs-PySCF validation on the vendor's acrylic acid (ESP-20260212 job, molecule e; raw files in esp-20260212/).
+"""Gaussian-vs-PySCF validation on acrylic acid from a reference Gaussian 16 + Multiwfn calculation (raw files local in esp-20260212/, not in git).
 
 Reference: Gaussian 16 C.01, PBE0-D3(BJ)/6-311+G(d,p) (5D 7F), SMD water, single point on their
 PBE0-D3(BJ)/6-31+G(d,p)/PCM geometry; ESP surface from Multiwfn (rho = 0.001; vtxe.pdb holds 23607 vertices, kcal/mol).
@@ -13,7 +13,7 @@ Same geometry (read from their .fchk) for every level, so only method/software d
   def  B3LYP/6-31G(d)/gas               esp_figure default
 For each: SCF energy, ESP at THEIR surface vertices vs. their ESP, and extremes on OUR own surface
 (same pipeline as esp_figure.calc, but no density fitting).
-Part 2: acrylamide (vendor molecule a: only the report's extrema exist, -59.86 / +66.28 kcal/mol) at ref and wat
+Part 2: acrylamide (reference extrema only, no raw files: -59.86 / +66.28 kcal/mol) at ref and wat
 level on our runs/acrylamide_w geometry (s-cis, B3LYP-D3(BJ)/6-31G(d)/PCM). Needs that run.
 Usage: python ref/validate_acrylic.py  -> ref/validate_acrylic.txt  (~15 min on 8 cores)
 """
@@ -32,7 +32,7 @@ KCAL = 627.5095
 BOHR = 0.529177210903   # Å
 G_E = -266.960376768   # e-sp.log SCF Done (includes D3(BJ) and SMD-CDS)
 G_MIN, G_MAX = -43.65, 62.01   # Multiwfn surface extrema, kcal/mol (surfanalysise.pdb)
-AM_MIN, AM_MAX = -59.86, 66.28  # vendor acrylamide extrema, kcal/mol (report slide 4)
+AM_MIN, AM_MAX = -59.86, 66.28  # reference acrylamide extrema, kcal/mol
 LEVELS = {"ref": ("pbe0", "6-311+g(d,p)", "smd", True),
           "fun": ("b3lyp", "6-311+g(d,p)", "smd", True),
           "bas": ("pbe0", "6-31g*", "smd", True),
@@ -98,13 +98,13 @@ def own(Vs, rmin, rmax):
 
 sym, R = fchk_geometry(REF / "e-sp.fchk")
 pts, Vref = vertices(REF / "vtxe.pdb")
-txt = [f"Gaussian-vs-PySCF validation, acrylic acid (vendor ESP-20260212 molecule e). PySCF {pyscf_version}.",
+txt = [f"Gaussian-vs-PySCF validation, acrylic acid (reference Gaussian 16 + Multiwfn calculation). PySCF {pyscf_version}.",
        f"Geometry from e-sp.fchk; reference: G16 C.01 PBE0-D3(BJ)/6-311+G(d,p) 5D SMD water, E = {G_E:.9f} Eh,",
        f"Multiwfn surface rho = 0.001 a.u., {len(pts)} vertices, ESP {Vref.min():.2f} .. {Vref.max():.2f} kcal/mol "
        f"(surface extrema {G_MIN} / {G_MAX}). Grid (99,590), no density fitting, spherical d.",
        "",
        "dE: PySCF - Gaussian (only meaningful for ref). ESP columns: at THEIR vertices, kcal/mol. Own surface: our",
-       "rho = 0.001 isosurface (esp_figure pipeline), min/max kcal/mol (a.u., change vs. the vendor's surface extrema).", "",
+       "rho = 0.001 isosurface (esp_figure pipeline), min/max kcal/mol (a.u., change vs. the reference surface extrema).", "",
        f"{'lvl':4} {'method':36} {'E / Eh':>15} {'dE kcal':>8} {'MAE':>5} {'max|d|':>6} {'rho@theirs':>15}  "
        f"{'own min':>24} {'own max':>24}"]
 for key in LEVELS:
@@ -116,7 +116,7 @@ for key in LEVELS:
     print(txt[-1], flush=True)
 
 sym, xyz = ef.read_xyz(ROOT / "runs" / "acrylamide_w" / "mol.xyz")
-txt += ["", "Acrylamide (vendor molecule a; their geometry unknown, report extrema only: "
+txt += ["", "Acrylamide (reference geometry unknown, reference extrema only: "
         f"{AM_MIN} / {AM_MAX} kcal/mol), our runs/acrylamide_w s-cis geometry:"]
 for key in ("ref", "wat"):
     Vs = run(sym, np.asarray(xyz) / BOHR, key)[3]

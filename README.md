@@ -26,8 +26,12 @@ git clone https://github.com/Fliporama/esp-figure.git && cd esp-figure
 sudo apt install -y python3-venv libgl1 libxrender1      # Ubuntu/WSL only
 python3 -m venv ~/esp-venv && source ~/esp-venv/bin/activate
 pip install --prefer-binary pyscf rdkit pyvista vtk matplotlib pillow geometric pyscf-dispersion
-python test_water.py                                     # ~1 min, should print "ok"
+python tests/test_water.py                               # ~1 min, should print "ok"
 ```
+
+Tests: `tests/test_*.py` (features) and `tests/sanity/*.py` (checks against reference numbers: Multiwfn NCI,
+literature frequencies, IR intensities, ...). `python tests/run_all.py` runs them all (several hours, real DFT);
+`python tests/run_all.py water extrema` runs only matching ones.
 
 `geometric` is needed for `--opt`, `pyscf-dispersion` for `--d3`. Rendering is
 offscreen, so no display is needed (a harmless `bad X server connection` warning may print).
@@ -99,7 +103,7 @@ those atoms only.
 
 `render`: `--extrema` marks the ESP minimum and maximum; `--extrema all` also marks every local minimum (cyan) and
 maximum (gold) on the surface, like Multiwfn, and lists them in `extrema.txt` (acrylic acid matches Multiwfn's 6 maxima
-and 2 minima within 0.2 Å and 0.25 kcal/mol, `test_extrema.py`). Minima above zero and maxima below zero are listed but not drawn. `--hbonds` draws H-bonds as
+and 2 minima within 0.2 Å and 0.25 kcal/mol, `tests/test_extrema.py`). Minima above zero and maxima below zero are listed but not drawn. `--hbonds` draws H-bonds as
 dashed lines, `--view auto` picks a camera direction.
 `panel A B --labels a,b` puts several rendered runs side by side with one shared colour bar.
 
@@ -133,7 +137,7 @@ negative ESP, blue positive.
   (PBE0-D3(BJ)/6-311+G(d,p)/SMD) the surface ESP agrees to 0.03 kcal/mol on average. The default level is
   cheaper: in water (`--d3 --solvent water`) ESP extrema come out ~10 % weaker than that reference level, in the
   gas phase ~20 %. Use `--solvent water` for anything about aqueous systems, and add `--ref-level` for final
-  numbers: `calc --ref-level --solvent water` reproduces the Gaussian extrema within 0.4 % (`test_reflevel.py`). UV-Vis has no sanity check at all;
+  numbers: `calc --ref-level --solvent water` reproduces the Gaussian extrema within 0.4 % (`tests/test_reflevel.py`). UV-Vis has no sanity check at all;
   IR and IGM in solvent are untested.
 
 ## Citing

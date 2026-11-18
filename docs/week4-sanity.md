@@ -2,7 +2,7 @@
 
 ## IGM: LOCKED 2026-11-15 (day session)
 
-`night/sanity/igm.py` is the contract (docstring wins). Method: **IGMH** (Lu & Chen, JCC 43, 539 (2022): IGM on a
+`tests/sanity/igm.py` is the contract (docstring wins). Method: **IGMH** (Lu & Chen, JCC 43, 539 (2022): IGM on a
 Hirshfeld partition of the real density), run by Multiwfn from a molden export; recommended over the original
 promolecular IGM (PCCP 19, 17928 (2017)) because it uses our actual wavefunction. Fragments: covalent molecules by
 default, `--igm-frags` for intramolecular contacts (PAM3: the two amide groups of an H-bond).
@@ -25,7 +25,7 @@ not Multiwfn's IGMH. Runtime ~7 min (two SCFs + Multiwfn). Multiwfn ignores an "
 
 ## IR: LOCKED 2026-11-15 (day session)
 
-`night/sanity/ir.py` is the contract; its docstring wins over this file. Decisions in `night/STATE.md` Answers
+`tests/sanity/ir.py` is the contract; its docstring wins over this file. Decisions
 (week 4 #3): finite-difference dipole derivatives, scale 0.960 (plotted spectrum only), Lorentzian FWHM 10 cm-1.
 
 | Check | System | Limit | Reference value |
