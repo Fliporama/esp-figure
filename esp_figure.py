@@ -3,7 +3,7 @@
 
   python esp_figure.py calc "C[C@@H](C(N)=O)C[C@H](C(N)=O)C[C@H](C)C(N)=O" --name pam3 [--charge 0] [--opt] [--d3] [--solvent water] [--rerank 5] [--orbitals] [--charges mk|chelpg] [--nci] [--fukui] [--force]
   (SMILES must specify all stereo; that one is the syndiotactic PAM trimer, esp_figure.PAM3)
-  python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema] [--hbonds]
+  python esp_figure.py render pam3 [--style rwb|rainbow|both] [--limit 0.06] [--view=x,y,z] [--extrema [all]] [--hbonds]
 
 Results live in runs/<name>/: mol.xyz, dens.cube, surf.vtk (with ESP), method.txt,
 and after render: ball.png, <style>_esp.png, caption.txt (+ homo/lumo .cube/.png with --orbitals).
@@ -18,6 +18,8 @@ GRID = 100       # density grid points per axis
 # ponytail: fixed point count, so spacing grows with molecule size; raise GRID if big molecules look faceted
 MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near the O atoms
 LIMITS = {"rainbow": 0.06, "rwb": 0.03}
+EXT_R = 0.5      # Å; render --extrema all: a local ESP extremum beats every surface vertex within this radius
+EXT_COLORS = {"min": "#00bcd4", "max": "#e6b800"}   # local extrema balls, as in Multiwfn/VMD pictures
 H2EV = 27.211386 # Hartree -> eV
 OPT_CONV = {  # geomeTRIC rules, recorded in method.txt
     "gau": "gau (geomeTRIC default, Gaussian-like: energy 1e-6 Eh, gradient rms/max 3e-4/4.5e-4, displacement rms/max 1.2e-3/1.8e-3, all five)",
@@ -132,7 +134,7 @@ def mol_from_xyz(sym, xyz):
     """Bond graph from coordinates (for H-bond topology when only mol.xyz is available)."""
     from rdkit import Chem
     from rdkit.Chem import rdDetermineBonds
-    m = Chem.MolFromXYZBlock(f"{len(sym)}\n\n" + "".join(f"{s} {x} {y} {z}\n" for s, (x, y, z) in zip(sym, xyz)))
+    m = Chem.MolFromXYZBlock(f"{len(sym)}\n\n" + "".join(f"{s} {x:.8f} {y:.8f} {z:.8f}\n" for s, (x, y, z) in zip(sym, xyz)))
     rdDetermineBonds.DetermineConnectivity(m)
     return m
 
@@ -176,6 +178,23 @@ def esp_extrema(surf, sym, xyz):
         k = int(np.linalg.norm(xyz - p, axis=1).argmin())
         out.append({"kind": kind, "value": float(surf["esp"][i]), "point": p, "atom": f"{sym[k]}{k + 1}"})
     return out
+
+
+def esp_local_extrema(surf, sym, xyz, r=EXT_R):
+    """All local ESP minima/maxima on the surface, like Multiwfn's surface analysis: a vertex lower (higher) than every
+    vertex within r Å of it. The radius, not the mesh's one-ring, decides, so small ripples between neighbouring
+    vertices don't count. Sorted minima first, most negative first, then maxima, most positive first."""
+    from scipy.spatial import cKDTree
+    p, v = np.asarray(surf.points), np.asarray(surf["esp"])
+    rank = np.empty(len(v), int)
+    rank[np.argsort(v, kind="stable")] = np.arange(len(v))   # ties broken by index: two equal vertices can't both win
+    out = []
+    for i, nb in enumerate(cKDTree(p).query_ball_point(p, r)):
+        kind = "min" if rank[i] == rank[nb].min() else "max" if rank[i] == rank[nb].max() else None
+        if kind:
+            k = int(np.linalg.norm(xyz - p[i], axis=1).argmin())
+            out.append({"kind": kind, "value": float(v[i]), "point": p[i], "atom": f"{sym[k]}{k + 1}"})
+    return sorted(out, key=lambda e: (e["kind"] == "max", e["value"] * (1 if e["kind"] == "min" else -1)))
 
 
 def esp_at(mol, dm, pts):
@@ -920,20 +939,30 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         view = auto_view(surf, sym, xyz)
         print("--view auto picked --view=" + ",".join(f"{c:.2f}" for c in view))
     ex = esp_extrema(surf, sym, xyz) if extrema else []
+    loc = esp_local_extrema(surf, sym, xyz) if extrema == "all" else []
     cam = np.asarray(view, float) if view is not None else ev[2]   # camera direction of the ESP pictures (tilt 0)
     cam = cam / np.linalg.norm(cam)
     nrm = surf.compute_normals(point_normals=True, cell_normals=False).point_data["Normals"] if ex else None
-    for e in ex:   # on the back if the surface lies between the point and the camera
+    for e in ex + loc:   # on the back if the surface lies between the point and the camera
         n = nrm[surf.find_closest_point(e["point"])]
         n = n if n @ (e["point"] - xyz.mean(0)) > 0 else -n   # outward
+        e["normal"] = n
         start = e["point"] + 0.3 * n          # off the surface first: a ray from a rim point would graze it
         e["front"] = not len(surf.ray_trace(start, start + 100 * cam)[0])
         e["view"] = ",".join(f"{c:.2f}" for c in (e["point"] - xyz.mean(0)) / np.linalg.norm(e["point"] - xyz.mean(0)))
 
     def markers(p):   # a label drawn over the molecule for a back-side point would sit on the wrong atoms
         front = [e for e in ex if e["front"]]
-        for e in front:
+        for e in front if not loc else []:    # with all extrema the global ones get a coloured ball below
             p.add_mesh(pv.Sphere(radius=0.15, center=e["point"]), color="#222222")
+        for e in loc:                         # Multiwfn colours: cyan minima, gold maxima (contrast on red and blue)
+            if e["front"]:
+                p.add_mesh(pv.Sphere(radius=0.12, center=e["point"] + 0.12 * e["normal"]), color=EXT_COLORS[e["kind"]], smooth_shading=True,
+                           specular=0.6)
+        nb = sum(not e["front"] for e in loc)
+        if nb:
+            p.add_text(f"{len(loc)} local extrema, {nb} on the back side: see extrema.txt", position=(30, 950),
+                       font_size=14, color="black")
         if front:
             p.add_point_labels(np.array([e["point"] for e in front]), [f"{e['value']:+.3f}" for e in front], font_size=22,
                                point_size=1, shape_opacity=0.7, always_visible=True, show_points=False)
@@ -956,7 +985,12 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
     def front_layer(mesh):
         """Only the triangles nearest the camera. Through a 70 % surface, a lobe hidden behind another shows its
         edge-on rim as dark ribbons (worst on folded shapes, off-axis views). Visible triangles are found by
-        drawing triangle ids as flat colours, without anti-aliasing, at twice the picture size."""
+        drawing triangle ids as flat colours, without anti-aliasing, at twice the picture size.
+        A triangle with one visible pixel is kept whole, so where a near lobe's outline crosses a far one, the far
+        triangles poke out under it as two stacked layers: dark sawtooth seams one triangle wide. Hence the mesh is
+        first split 16-fold (seams ~1 px), then closed (grown by one ring of triangles and shrunk back), which fills
+        the pinholes left by tiny edge-on triangles that cover no pixel centre without widening the overlap."""
+        mesh = mesh.triangulate().subdivide(2, "linear")   # ESP interpolated linearly, as Gouraud shading does anyway
         ids = np.arange(mesh.n_cells)
         m = mesh.copy()
         m.cell_data["id"] = np.c_[ids & 255, ids >> 8 & 255, ids >> 16 & 255].astype(np.uint8)
@@ -968,7 +1002,12 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         img = p.screenshot(return_img=True).astype(np.int64)
         p.close()
         code = img[..., 0] + (img[..., 1] << 8) + (img[..., 2] << 16)
-        return mesh.extract_cells(np.unique(code[code < mesh.n_cells])).extract_surface(algorithm="dataset_surface")
+        tri = mesh.faces.reshape(-1, 4)[:, 1:]
+        vis = np.zeros(len(tri), bool)
+        vis[np.unique(code[code < mesh.n_cells])] = True
+        grown = np.isin(tri, tri[vis]).any(axis=1)           # + every triangle touching a visible one
+        keep = grown & ~np.isin(tri, tri[~grown]).any(axis=1)   # - the outer ring again: holes stay filled, edges don't move
+        return mesh.extract_cells(np.flatnonzero(keep | vis)).extract_surface(algorithm="dataset_surface")
 
     def shoot(path, add_surface=None, tilt=0.0, axis=1, shift=0.0, flat=False):
         p = pv.Plotter(off_screen=True, window_size=(1600, 1000))
@@ -1112,6 +1151,18 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
                      + ("marked on the map" if e["front"] else f"on the back side, listed in the corner (--view={e['view']} faces it)"))
         if not e["front"]:
             print(f"V_s,{e['kind']} is on the back side; --view={e['view']} faces it")
+    if loc:
+        (out / "extrema.txt").write_text(
+            f"# local ESP extrema on the surface (vertex beats every vertex within {EXT_R} Å), {len(loc)} found; "
+            f"x y z in Å (mol.xyz frame); front = visible in the ESP pictures\n"
+            "# kind  V (a.u.)  V (kcal/mol)  nearest atom  x y z  front\n" + "".join(
+                f"{e['kind']} {e['value']:+.5f} {e['value'] * 627.5095:+8.2f} {e['atom']} "
+                f"{e['point'][0]:.3f} {e['point'][1]:.3f} {e['point'][2]:.3f} {'yes' if e['front'] else 'no'}\n" for e in loc),
+            encoding="utf-8")
+        nmin = sum(e["kind"] == "min" for e in loc)
+        notes.append(f"local ESP extrema: {nmin} minima (cyan balls), {len(loc) - nmin} maxima (gold balls), "
+                     f"{sum(not e['front'] for e in loc)} on the back side and not drawn; a vertex counts if it is lower "
+                     f"(higher) than every surface vertex within {EXT_R} Å; values in extrema.txt")
     if hbond_lines:
         notes.append("H-bonds drawn: " + (", ".join(f"{sym[h]}{h + 1}···{sym[a]}{a + 1} {np.linalg.norm(xyz[h] - xyz[a]):.2f} Å"
                                                 for h, a in hb) or "none") + f" (H on N/O, acceptor > 3 bonds away, < {HB_CUT} Å)")
@@ -1168,7 +1219,9 @@ if __name__ == "__main__":
     r.add_argument("--view", type=lambda s: s if s == "auto" else [float(x) for x in s.split(",")],
                    help="camera direction, e.g. --view=0,0,1, or auto (scores 600 directions: extrema, C=O, H-bonds, chain flat); "
                         "default: along the thinnest molecular axis")
-    r.add_argument("--extrema", action="store_true", help="mark the most negative/positive ESP point (V_s,min/max) with values")
+    r.add_argument("--extrema", nargs="?", const=True, choices=["all"],
+                   help="mark the most negative/positive ESP point (V_s,min/max) with values; --extrema all also marks every "
+                        "local minimum (cyan) and maximum (gold) and lists them in extrema.txt")
     r.add_argument("--hbonds", action="store_true", help="draw intramolecular H-bonds as dashed lines")
     q = sub.add_parser("panel", help="rendered ESP maps side by side, one colour bar (seconds)")
     q.add_argument("names", nargs="+", help="run names, already rendered with the same --limit")

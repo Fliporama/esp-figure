@@ -153,6 +153,13 @@ First target molecule: polyacrylamide (PAM) oligomer.
   refused for Br (no basis in PySCF), ECP atoms, `--spin`. `test_reflevel.py`: via `calc`, acrylic acid −43.80/+61.75
   vs Gaussian −43.65/+62.01 kcal/mol (its Gaussian part needs the local `ref/esp-20260212/`). Multiwfn path: env
   `MULTIWFN`. `prototype/` deleted. 12 regression tests, test_igm, 19/19 sanity pass.
+- **Day session 2026-11-18:** `render --extrema all` built: every local ESP min (cyan) / max (gold) on the surface
+  (`esp_local_extrema`, vertex beats all vertices within `EXT_R` = 0.5 Å; count stable for 0.3–1.0 Å), global ones keep
+  value labels, `extrema.txt` lists all. Acrylic acid (`runs/acrylic_ref`, vendor geometry, `--ref-level --solvent water`)
+  = Multiwfn's 6 max + 2 min within 0.2 Å / 0.25 kcal/mol (`test_extrema.py`). PAM3 fold: 16 extrema, some trivial
+  (min +0.018, max −0.001..−0.010 a.u.); a value cutoff option was suggested, not built. Seam artefacts fixed (pitfall 3).
+  `mol_from_xyz` fix: tiny coordinates were written as `-9e-06`, which RDKit's XYZ reader rejects (planar molecules).
+  PAM3 fold/ext `--ref-level` runs started (`runs/ref_pam3s.sh`, status in `runs/ref_pam3s.status`).
 - **Next (user to choose, 2026-11-16):** (1) PAM3 fold + ext at `--ref-level` in water on the existing geometries
   (`calc runs/pam3s_fold/mol.xyz --name pam3s_fold_ref --d3 --solvent water --ref-level`, same for ext; not run yet,
   time unmeasured, guess 1–2 h each; the "~5x" in the `--ref-level` help is a guess too); (2) label all local ESP
@@ -209,8 +216,12 @@ extremes grow ~20–25 % (−0.089 to +0.108): use ±0.10 / ±0.05 (`--limit 0.1
    compact (folded) shapes: a lobe hidden behind another also faces the camera,
    and its edge-on rim shows through as dark ribbons, worst at off-axis views.
    `render()` draws only the layer nearest the camera (`front_layer`: triangle
-   ids rendered as flat colours, no anti-aliasing, 2× size; a one-ring
-   neighbour grow made jagged overlaps, so none). Mesh, winding and normals
+   ids rendered as flat colours, no anti-aliasing, 2× size). Visibility is per
+   triangle, so a far triangle with one visible pixel pokes out under a near
+   lobe's outline as two stacked layers: dark sawtooth seams one triangle wide
+   (fixed 2026-11-18): the mesh is split 16-fold first (seams ~1 px), then
+   closed (grow one ring, shrink back) to fill pinholes from tiny edge-on
+   triangles. A plain grow without the shrink leaves a 3–5 px dark fringe. Mesh, winding and normals
    were checked and are fine (2026-11-12). Opacity 0.7 keeps the colours as
    strong as the old two-layer 0.55.
 4. **Camera angle**: look along the molecule's thinnest principal axis, with
