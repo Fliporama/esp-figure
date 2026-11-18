@@ -163,6 +163,9 @@ First target molecule: polyacrylamide (PAM) oligomer.
   Whole pipeline vs vendor (`runs/acrylic_full`: SMILES `--opt --rerank 2 --d3 --solvent water --ref-level`, 663 s on
   4 shared threads): same conformer (RMSD 0.006 Å to their geometry), same 6 max + 2 min within 0.07 Å, all 8 values
   within 0.6 kcal/mol / 2.6 % (global −0.9 / +0.6 %); our cheaper geometry adds 0.2–2 % over their-geometry runs.
+  S1–S4 done (IMPROVEMENTS §6): no specular on the ESP surface (its glint read as V≈0 on PAM3's red C=O lobe);
+  solvent-convention sentence in the caption (`SOLV_NOTE`); `--extrema all` draws only extrema of the expected sign
+  (prominence rejected: carbonyl O minima only 1.2–1.8 kcal/mol prominent); `test_colormaps.py` (rendered pixels).
   Related-work survey: `docs/related-work.md` (closest: espmap, same vertex-ESP pipeline, aims at measurement;
   nobody else validates against Gaussian/Multiwfn; ideas not built: no specular, solvent-convention caption line).
 - **Next (user to choose, 2026-11-16):** (1) PAM3 fold + ext at `--ref-level` in water on the existing geometries

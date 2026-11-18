@@ -99,7 +99,7 @@ those atoms only.
 
 `render`: `--extrema` marks the ESP minimum and maximum; `--extrema all` also marks every local minimum (cyan) and
 maximum (gold) on the surface, like Multiwfn, and lists them in `extrema.txt` (acrylic acid matches Multiwfn's 6 maxima
-and 2 minima within 0.2 Å and 0.25 kcal/mol, `test_extrema.py`). `--hbonds` draws H-bonds as
+and 2 minima within 0.2 Å and 0.25 kcal/mol, `test_extrema.py`). Minima above zero and maxima below zero are listed but not drawn. `--hbonds` draws H-bonds as
 dashed lines, `--view auto` picks a camera direction.
 `panel A B --labels a,b` puts several rendered runs side by side with one shared colour bar.
 

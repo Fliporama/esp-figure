@@ -10,8 +10,10 @@ def run(root, name, **kw):
 
 
 with tempfile.TemporaryDirectory() as root:
-    _, e0, (lo0, hi0) = run(root, "gas")
+    log0, e0, (lo0, hi0) = run(root, "gas")
     log, e1, (lo1, hi1) = run(root, "aq", solvent="water")
+    cap = lambda l: re.search(r"^caption: (.*)$", l, re.M).group(1)
+    assert "solute polarised by the implicit solvent" in cap(log) and "polarised" not in cap(log0), cap(log)
     dg = (e1 - e0) * 627.5095
     assert "IEF-PCM(water, eps 78.3553)" in log and "solvent: implicit water" in log, log
     assert -12 < dg < -3, f"dG_solv {dg:.2f} kcal/mol"

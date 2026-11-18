@@ -30,12 +30,18 @@ with tempfile.TemporaryDirectory() as root:
         assert abs(abs(e["point"][axis]) - 2.0) < 0.05, e
     render("sph", style="rwb", root=root, view=[0, 0, 1], extrema="all")   # looking down z: all 4 on the rim, visible
     rows = [l.split() for l in (out / "extrema.txt").read_text(encoding="utf-8").splitlines() if not l.startswith("#")]
-    assert len(rows) == 4 and all(r[-1] == "yes" for r in rows), rows
+    assert len(rows) == 4 and all(r[-2] == r[-1] == "yes" for r in rows), rows      # columns: ... front drawn
     render("sph", style="rwb", root=root, view=[1, 0, 0], extrema="all")   # looking down x: the -x maximum is behind
     rows = [l.split() for l in (out / "extrema.txt").read_text(encoding="utf-8").splitlines() if not l.startswith("#")]
-    assert [r[-1] for r in rows].count("no") == 1, rows
+    assert [r[-2] for r in rows].count("no") == 1 and [r[-1] for r in rows].count("no") == 1, rows
     assert "local ESP extrema: 2 minima" in (out / "caption.txt").read_text(encoding="utf-8")
-    print("synthetic sphere: 2 min + 2 max, back side detected")
+    s["esp"] = 0.05 * (p[:, 0] ** 2 - p[:, 1] ** 2) + 0.06                   # all positive: minima of unexpected sign
+    s.save(out / "surf.vtk")
+    render("sph", style="rwb", root=root, view=[0, 0, 1], extrema="all")
+    rows = [l.split() for l in (out / "extrema.txt").read_text(encoding="utf-8").splitlines() if not l.startswith("#")]
+    assert len(rows) == 4 and [(r[0], r[-2], r[-1]) for r in rows] == [("min", "yes", "no")] * 2 + [("max", "yes", "yes")] * 2, rows
+    assert "2 of unexpected sign" in (out / "caption.txt").read_text(encoding="utf-8")
+    print("synthetic sphere: 2 min + 2 max, back side detected, positive minima listed but not drawn")
 
     if not (REF / "surfanalysise.pdb").exists():
         print("reference files absent: Multiwfn comparison skipped")

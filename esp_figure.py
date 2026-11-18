@@ -20,6 +20,10 @@ MARGIN = 6.0     # bohr of empty space around the molecule; less -> holes near t
 LIMITS = {"rainbow": 0.06, "rwb": 0.03}
 EXT_R = 0.5      # Å; render --extrema all: a local ESP extremum beats every surface vertex within this radius
 EXT_COLORS = {"min": "#00bcd4", "max": "#e6b800"}   # local extrema balls, as in Multiwfn/VMD pictures
+# Caption sentence with --solvent. Adding the continuum's own charges nearly cancels the solvent shift of the
+# extrema (espmap, chlorobenzene: -3.60 -> +0.05 kcal/mol), so a reader must know which quantity is shown.
+SOLV_NOTE = (" The ESP is that of the solute polarised by the implicit solvent; the solvent's own surface charges are "
+             "not included (the convention of Gaussian cubegen and Multiwfn).")
 H2EV = 27.211386 # Hartree -> eV
 OPT_CONV = {  # geomeTRIC rules, recorded in method.txt
     "gau": "gau (geomeTRIC default, Gaussian-like: energy 1e-6 Eh, gradient rms/max 3e-4/4.5e-4, displacement rms/max 1.2e-3/1.8e-3, all five)",
@@ -798,7 +802,7 @@ SCF energy: {mf.e_tot:.8f} Eh (converged: {mf.converged}){disp}
 ESP range on surface: {V.min():.4f} to {V.max():.4f} a.u.
 {orb}software: PySCF {pyscf.__version__}, RDKit {rdkit.__version__}, NumPy {np.__version__}
 wall time: {time.time() - t0:.0f} s
-caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {alevel} level with PySCF {pyscf.__version__} ({geo}).
+caption: Electrostatic potential mapped onto the {ISO} a.u. electron-density isosurface, computed at the {alevel} level with PySCF {pyscf.__version__} ({geo}).{SOLV_NOTE if solvent else ""}
 """)
     print(log.read_text())
     return out
@@ -950,18 +954,24 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
         start = e["point"] + 0.3 * n          # off the surface first: a ray from a rim point would graze it
         e["front"] = not len(surf.ray_trace(start, start + 100 * cam)[0])
         e["view"] = ",".join(f"{c:.2f}" for c in (e["point"] - xyz.mean(0)) / np.linalg.norm(e["point"] - xyz.mean(0)))
+    # Drawn only with the expected sign: a minimum at V > 0 (a dip between C-H groups) or a maximum at V < 0 (an H inside
+    # a negative region) says little. Prominence over the surroundings can't tell them apart: on PAM3 the carbonyl O
+    # minima stand out by only 1.2-1.8 kcal/mol, like the trivial ones (1.0-2.0). extrema.txt still lists all.
+    for e in loc:
+        e["drawn"] = e["front"] and (e["value"] < 0) == (e["kind"] == "min")
 
     def markers(p):   # a label drawn over the molecule for a back-side point would sit on the wrong atoms
         front = [e for e in ex if e["front"]]
         for e in front if not loc else []:    # with all extrema the global ones get a coloured ball below
             p.add_mesh(pv.Sphere(radius=0.15, center=e["point"]), color="#222222")
         for e in loc:                         # Multiwfn colours: cyan minima, gold maxima (contrast on red and blue)
-            if e["front"]:
+            if e["drawn"]:
                 p.add_mesh(pv.Sphere(radius=0.12, center=e["point"] + 0.12 * e["normal"]), color=EXT_COLORS[e["kind"]], smooth_shading=True,
                            specular=0.6)
-        nb = sum(not e["front"] for e in loc)
-        if nb:
-            p.add_text(f"{len(loc)} local extrema, {nb} on the back side: see extrema.txt", position=(30, 950),
+        nb, nw = sum(not e["front"] for e in loc), sum(e["front"] and not e["drawn"] for e in loc)
+        if nb or nw:
+            p.add_text(f"{len(loc)} local extrema" + (f", {nb} on the back side" if nb else "") +
+                       (f", {nw} of unexpected sign not drawn" if nw else "") + ": see extrema.txt", position=(30, 950),
                        font_size=14, color="black")
         if front:
             p.add_point_labels(np.array([e["point"] for e in front]), [f"{e['value']:+.3f}" for e in front], font_size=22,
@@ -1037,7 +1047,8 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
     for st in styles:
         lim = lims[st]
         shoot(out / f"{st}_esp.png", lambda p: markers(p) or p.add_mesh(
-            front, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.3,
+            # no specular: a white glint reads as V ~ 0 in rwb (on the red C=O lobe of PAM3) or as an extremum
+            front, scalars="esp", cmap=cmaps[st], clim=(-lim, lim), opacity=0.7, smooth_shading=True, specular=0.0,
             scalar_bar_args=dict(title="ESP (a.u.)\n", fmt="%.3f", n_labels=5, color="black", vertical=True,
                                  position_x=0.88, position_y=0.2, width=0.05, height=0.6,
                                  title_font_size=28, label_font_size=24)))
@@ -1154,15 +1165,19 @@ def render(name, style="both", limit=None, view=None, root="runs", extrema=False
     if loc:
         (out / "extrema.txt").write_text(
             f"# local ESP extrema on the surface (vertex beats every vertex within {EXT_R} Å), {len(loc)} found; "
-            f"x y z in Å (mol.xyz frame); front = visible in the ESP pictures\n"
-            "# kind  V (a.u.)  V (kcal/mol)  nearest atom  x y z  front\n" + "".join(
+            f"x y z in Å (mol.xyz frame); front = visible in the ESP pictures; drawn = front and of the expected sign "
+            f"(minimum V < 0, maximum V > 0)\n"
+            "# kind  V (a.u.)  V (kcal/mol)  nearest atom  x y z  front  drawn\n" + "".join(
                 f"{e['kind']} {e['value']:+.5f} {e['value'] * 627.5095:+8.2f} {e['atom']} "
-                f"{e['point'][0]:.3f} {e['point'][1]:.3f} {e['point'][2]:.3f} {'yes' if e['front'] else 'no'}\n" for e in loc),
+                f"{e['point'][0]:.3f} {e['point'][1]:.3f} {e['point'][2]:.3f} {'yes' if e['front'] else 'no'} "
+                f"{'yes' if e['drawn'] else 'no'}\n" for e in loc),
             encoding="utf-8")
         nmin = sum(e["kind"] == "min" for e in loc)
         notes.append(f"local ESP extrema: {nmin} minima (cyan balls), {len(loc) - nmin} maxima (gold balls), "
-                     f"{sum(not e['front'] for e in loc)} on the back side and not drawn; a vertex counts if it is lower "
-                     f"(higher) than every surface vertex within {EXT_R} Å; values in extrema.txt")
+                     f"{sum(not e['front'] for e in loc)} on the back side and "
+                     f"{sum(e['front'] and not e['drawn'] for e in loc)} of unexpected sign (minimum V > 0 or maximum "
+                     f"V < 0) not drawn; a vertex counts if it is lower (higher) than every surface vertex within {EXT_R} Å; "
+                     f"all values in extrema.txt")
     if hbond_lines:
         notes.append("H-bonds drawn: " + (", ".join(f"{sym[h]}{h + 1}···{sym[a]}{a + 1} {np.linalg.norm(xyz[h] - xyz[a]):.2f} Å"
                                                 for h, a in hb) or "none") + f" (H on N/O, acceptor > 3 bonds away, < {HB_CUT} Å)")
