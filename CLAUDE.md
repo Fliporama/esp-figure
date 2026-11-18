@@ -55,6 +55,9 @@ gitignored `ref/esp-20260212/`; `ref/validate_acrylic.{py,txt}`, `tests/test_ref
   improves (likely 6-31G(d) BSSE over-binding the H-bond, SMD vs PCM, smaller PBE0 D3). Single points, one conformer
   each: say "no measurable preference", and do M1 before any claim. ESP fold −0.0944/+0.1117, ext −0.0980/+0.1212
   a.u. (9–13 % stronger than B3LYP/PCM, same sites): figures comparing both at this level need ≥ `--limit 0.125,0.0625`.
+  Rendered so (`--extrema all`): fold `--view=0.56,-0.52,-0.64`, ext `--view=-0.11,0.65,-0.75` (from `--view auto`;
+  the default hides ext's V_s,max); panels `runs/pam3s_ref_panel_{rainbow,rwb}.png`. `pam3s_fold_ref` predates
+  `SOLV_NOTE`: its caption sentence was added by hand (noted in its method.txt).
 - Figures: `--limit 0.10,0.05`; fold at `--view=0.56,-0.52,-0.64` (`--view auto` picks the same); panels
   `runs/pam3s_panel_{rainbow,rwb}.png`. HOMO/LUMO fold −6.75/+0.53, ext −6.71/+0.61 eV. NCI: H26···O16 lobe
   −0.030 a.u. (`runs/pam3s_fold_nci_fine`, `--view=0.02,0.87,0.50 --hbonds`). Fukui in water: f− top carbonyl
