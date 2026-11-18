@@ -162,6 +162,22 @@ each with its own design and sanity check first.
 Not worth taking (reasons in `docs/related-work.md`): xyzrender's 2D-projected ESP (less exact), espmap's
 perceptual colour maps as defaults (we match GaussView; an option at most), AI-agent/MCP wrappers.
 
+## 8. Publication ideas (added 2026-11-18; not now, keep as ideas)
+
+- **Validation report** (short page or document, ~1–2 h, all numbers exist): what the tool does; Gaussian 16 +
+  Multiwfn comparison (acrylic acid: extrema within 0.4 % on their geometry, 1–3 % from SMILES, 6 + 2 local extrema
+  within 0.07 Å; acrylamide within 0.5 %); error of each cheaper level (gas −22 %, PCM −8 %); known limits. For the
+  lab, a supervisor, or anyone deciding whether to trust the figures.
+- **Software paper** (JOSS or J. Cheminformatics), after M6 (package, `tests/`), M5 (error budget), the public-repo
+  tidy-up, and `--uvvis` validated or removed. Statement of need from `docs/related-work.md`: a free, validated,
+  one-command GaussView/Multiwfn replacement for publication ESP figures. Vertex-only ESP is not new (Bulat 2010,
+  Lu & Chen 2012) and espmap shares the core, so argue usefulness and validation, not novelty.
+- **PAM science paper** with the tool in the methods/SI. Needs M1 (ensembles) first: fold vs ext is "comparable
+  within error" with one conformer each.
+- Cautions: publish only our own summary numbers from the vendor job, never their files, and check the contract
+  for limits on quoting it; decide whether vendor mentions stay in the public repo. Add a one-sentence statement on
+  AI-assisted coding (commits carry `Co-Authored-By: Claude`).
+
 ## Roadmap: one month, ~1 session/day (planned 2026-11-11)
 
 The bottleneck is compute and validation, not code: most items are 10–80
